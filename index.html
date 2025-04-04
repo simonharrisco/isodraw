@@ -3,22 +3,50 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Isometric Drawing Tool</title>
+    <title>Isometric</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="container">
-      <div class="toolbar">
-        <button id="exportBtn">Export SVG</button>
-        <button id="clearBtn">Clear Canvas</button>
-        <button id="undoBtn">Undo Last Shape</button>
-        <label for="colorPicker">Color:</label>
-        <input type="color" id="colorPicker" value="#4CAF50" />
-        <button id="fillToggleBtn">Fill Tool</button>
-        <button id="deleteToggleBtn">Delete Tool</button>
-      </div>
-      <canvas id="isometricCanvas"></canvas>
-    </div>
+    <main class="app-container">
+      <section class="toolbar-container">
+        <div class="tool-group actions">
+          <button id="undoBtn" title="Undo Last Shape (Cmd/Ctrl+Z eventually?)">
+            Undo
+          </button>
+          <button id="clearBtn" title="Clear Canvas">Clear</button>
+          <button id="exportBtn" title="Export SVG">Export</button>
+        </div>
+        <div class="tool-group tools">
+          <button
+            id="drawToolBtn"
+            class="tool-button active"
+            title="Draw Tool (Default)"
+          >
+            Draw
+          </button>
+          <button id="fillToggleBtn" class="tool-button" title="Fill Tool">
+            Fill
+          </button>
+          <button id="deleteToggleBtn" class="tool-button" title="Delete Tool">
+            Delete
+          </button>
+        </div>
+        <div class="tool-group color-picker-group">
+          <label for="colorPicker" class="visually-hidden">Color:</label>
+          <input
+            type="color"
+            id="colorPicker"
+            value="#000000"
+            title="Select Color"
+          />
+        </div>
+      </section>
+
+      <section class="canvas-container">
+        <canvas id="isometricCanvas"></canvas>
+      </section>
+    </main>
+
     <script src="script.js"></script>
   </body>
 </html>

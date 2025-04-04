@@ -10,6 +10,7 @@ class IsometricDrawingTool {
     this.colorPicker = document.getElementById("colorPicker");
     this.fillToggleBtn = document.getElementById("fillToggleBtn");
     this.deleteToggleBtn = document.getElementById("deleteToggleBtn"); // Get delete button
+    this.drawToolBtn = document.getElementById("drawToolBtn"); // Get Draw button
     this.currentColor = this.colorPicker.value; // Initialize with default color
     this.isFillMode = false; // Track fill tool state
     this.isDeleteMode = false; // Track delete tool state
@@ -27,8 +28,7 @@ class IsometricDrawingTool {
 
     // Initialize event listeners
     this.initializeEventListeners();
-
-    // Draw initial state
+    this.updateActiveToolButton(); // Set initial active button state
     this.redrawAll();
   }
 
@@ -43,10 +43,15 @@ class IsometricDrawingTool {
       // Optionally redraw previews if needed, or just update the state
     });
 
-    this.fillToggleBtn.addEventListener("click", () => this.toggleFillMode());
+    this.drawToolBtn.addEventListener("click", () =>
+      this.setActiveTool("draw")
+    ); // Listener for Draw button
+    this.fillToggleBtn.addEventListener("click", () =>
+      this.setActiveTool("fill")
+    );
     this.deleteToggleBtn.addEventListener("click", () =>
-      this.toggleDeleteMode()
-    ); // Listener for delete button
+      this.setActiveTool("delete")
+    );
 
     document
       .getElementById("exportBtn")
@@ -319,27 +324,51 @@ class IsometricDrawingTool {
   }
 
   handleMouseMove(e) {
-    if (this.isFillMode || this.isDeleteMode) {
-      // Don't update snap point or redraw constantly in tool modes
-      // Cursor update is handled by mode toggles
-      return;
-    }
     const rect = this.canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
+
+    if (this.isFillMode || this.isDeleteMode) {
+      let shapeHovered = false;
+      // Check shapes in reverse order (topmost first)
+      for (let i = this.shapes.length - 1; i >= 0; i--) {
+        if (
+          this.isPointInPolygon(
+            { x: screenX, y: screenY },
+            this.shapes[i].points
+          )
+        ) {
+          shapeHovered = true;
+          break;
+        }
+      }
+
+      if (this.isFillMode) {
+        this.canvas.style.cursor = shapeHovered ? "crosshair" : "pointer";
+      } else if (this.isDeleteMode) {
+        this.canvas.style.cursor = shapeHovered ? "not-allowed" : "pointer";
+      }
+      // Do not update snap point or redraw in these modes
+      return;
+    }
+
+    // --- Default Draw Mode MouseMove Logic ---
     const gridPos = this.screenToNearestGridPoint(screenX, screenY);
     const snappedScreenPos = this.gridToScreen(gridPos.x, gridPos.y);
     this.snapPoint = snappedScreenPos;
-    this.redrawAll();
+    this.redrawAll(); // Only redraw for snap point updates in Draw mode
   }
 
   handleMouseOut() {
+    // Reset cursor to the default for the active tool when mouse leaves
+    this.updateCursor();
+
     if (!this.isFillMode && !this.isDeleteMode && this.isDrawing) {
-      this.cancelDrawing(); // Cancel drawing if mouse leaves (and not in a tool mode)
+      this.cancelDrawing();
     }
     if (!this.isFillMode && !this.isDeleteMode) {
-      this.snapPoint = null; // Clear snap point only if not in a tool mode
-      this.redrawAll(); // Redraw to remove snap point
+      this.snapPoint = null;
+      this.redrawAll();
     }
   }
 
@@ -348,9 +377,9 @@ class IsometricDrawingTool {
       if (this.isDrawing) {
         this.cancelDrawing();
       } else if (this.isFillMode) {
-        this.toggleFillMode(false); // Turn off fill mode
+        this.setActiveTool("draw"); // Escape from Fill goes back to Draw
       } else if (this.isDeleteMode) {
-        this.toggleDeleteMode(false); // Turn off delete mode
+        this.setActiveTool("draw"); // Escape from Delete goes back to Draw
       }
     }
   }
@@ -366,8 +395,7 @@ class IsometricDrawingTool {
   clearCanvas() {
     this.shapes = [];
     this.cancelDrawing();
-    if (this.isFillMode) this.toggleFillMode(false); // Turn off fill mode
-    if (this.isDeleteMode) this.toggleDeleteMode(false); // Turn off delete mode
+    this.setActiveTool("draw"); // Reset to draw tool on clear
     this.redrawAll();
   }
 
@@ -448,39 +476,49 @@ class IsometricDrawingTool {
     URL.revokeObjectURL(url);
   }
 
-  // --- Mode Toggles ---
-  toggleFillMode(forceState) {
-    const wasActive = this.isFillMode;
-    if (this.isDeleteMode) this.toggleDeleteMode(false); // Turn off delete if turning on fill
-    this.isFillMode = !wasActive;
-    this.fillToggleBtn.classList.toggle("active", this.isFillMode);
-    if (this.isFillMode && this.isDrawing) {
-      this.cancelDrawing();
+  // --- Mode Management ---
+  setActiveTool(toolName) {
+    // Deactivate all modes first
+    this.isDrawing = false; // Cancel any ongoing drawing action
+    this.isFillMode = false;
+    this.isDeleteMode = false;
+
+    // Activate the selected mode
+    if (toolName === "fill") {
+      this.isFillMode = true;
+    } else if (toolName === "delete") {
+      this.isDeleteMode = true;
+    } else {
+      // Default to draw mode (isDrawing is handled by clicks)
     }
-    this.updateCursor(); // Update cursor based on active mode
+
+    // If cancelling a drawing was needed (e.g., switching tool mid-draw)
+    if (this.currentShapePoints.length > 0 && toolName !== "draw") {
+      this.currentShapePoints = [];
+      this.snapPoint = null;
+      this.redrawAll(); // Redraw to remove preview
+    }
+
+    this.updateActiveToolButton();
+    this.updateCursor();
   }
 
-  toggleDeleteMode(forceState) {
-    const newState =
-      typeof forceState === "boolean" ? forceState : !this.isDeleteMode;
-    if (newState === this.isDeleteMode) return; // No change
-
-    if (newState && this.isFillMode) this.toggleFillMode(false); // Turn off fill if turning on delete
-    this.isDeleteMode = newState;
+  updateActiveToolButton() {
+    this.drawToolBtn.classList.toggle(
+      "active",
+      !this.isFillMode && !this.isDeleteMode
+    );
+    this.fillToggleBtn.classList.toggle("active", this.isFillMode);
     this.deleteToggleBtn.classList.toggle("active", this.isDeleteMode);
-    if (this.isDeleteMode && this.isDrawing) {
-      this.cancelDrawing();
-    }
-    this.updateCursor(); // Update cursor based on active mode
   }
 
   updateCursor() {
     if (this.isDeleteMode) {
-      this.canvas.style.cursor = "not-allowed"; // Indicate deletion
+      this.canvas.style.cursor = "not-allowed";
     } else if (this.isFillMode) {
       this.canvas.style.cursor = "crosshair";
     } else {
-      this.canvas.style.cursor = "default";
+      this.canvas.style.cursor = "default"; // Default for drawing
     }
   }
 
