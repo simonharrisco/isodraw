@@ -1,3 +1,239 @@
+// --- Command Pattern ---
+
+// Base Command (Interface concept)
+class Command {
+    constructor() {
+        if (this.constructor === Command) {
+            throw new Error("Abstract classes can't be instantiated.");
+        }
+    }
+    execute() {
+        throw new Error("Method 'execute()' must be implemented.");
+    }
+    undo() {
+        throw new Error("Method 'undo()' must be implemented.");
+    }
+}
+
+// Concrete Commands
+class AddShapeCommand extends Command {
+    constructor(tool, shapeData) {
+        super();
+        this.tool = tool;
+        this.shapeData = shapeData; // { points: [...], color: '...' }
+    }
+
+    execute() {
+        this.tool.shapes.push(this.shapeData);
+        this.tool.addPaletteColor(this.shapeData.color); // Ensure palette updates
+    }
+
+    undo() {
+        const index = this.tool.shapes.lastIndexOf(this.shapeData);
+        if (index > -1) {
+            this.tool.shapes.splice(index, 1);
+            // Note: Palette undo is tricky; maybe don't undo palette changes?
+            // Or implement a more complex palette state management. For now, keep it simple.
+        }
+    }
+}
+
+class DeleteShapeCommand extends Command {
+    constructor(tool, shapeIndex, deletedShape) {
+        super();
+        this.tool = tool;
+        this.shapeIndex = shapeIndex;
+        this.deletedShape = deletedShape;
+    }
+
+    execute() {
+        // Execute performs the deletion (both initially and on redo)
+        // It relies on the shapeIndex being correct relative to the state *before* this command executed.
+        if (this.shapeIndex >= 0 && this.shapeIndex < this.tool.shapes.length) {
+            // Check if the shape at the index *might* be the one we intend to delete.
+            // This is a basic sanity check, as object identity won't match the copy.
+            // If the deletedShape copy matches color/point count, it increases confidence.
+            // For now, we primarily trust the index passed to the constructor.
+            const actuallyDeleted = this.tool.shapes.splice(this.shapeIndex, 1);
+            // console.log(`DeleteShapeCommand executed: Spliced at index ${this.shapeIndex}`);
+        } else {
+            // This case might happen if other commands (like Clear) modified the array drastically before a redo.
+            console.warn(`DeleteShapeCommand execute: Invalid or outdated shape index ${this.shapeIndex} for current shapes length ${this.tool.shapes.length}. Cannot delete.`);
+        }
+    }
+
+    undo() {
+        // Add the shape back at its original index
+        this.tool.shapes.splice(this.shapeIndex, 0, this.deletedShape);
+        this.tool.addPaletteColor(this.deletedShape.color); // Add color back to palette
+    }
+}
+
+class FillShapeCommand extends Command {
+    constructor(tool, shapeIndex, oldColor, newColor) {
+        super();
+        this.tool = tool;
+        this.shapeIndex = shapeIndex;
+        this.oldColor = oldColor;
+        this.newColor = newColor;
+    }
+
+    execute() {
+        if (this.tool.shapes[this.shapeIndex]) {
+            this.tool.shapes[this.shapeIndex].color = this.newColor;
+            this.tool.addPaletteColor(this.newColor);
+        }
+    }
+
+    undo() {
+        if (this.tool.shapes[this.shapeIndex]) {
+            this.tool.shapes[this.shapeIndex].color = this.oldColor;
+            // Again, palette undo is tricky.
+        }
+    }
+}
+
+class EditShapePointCommand extends Command {
+    constructor(tool, shapeIndex, pointIndex, oldPoint, newPoint) {
+        super();
+        this.tool = tool;
+        this.shapeIndex = shapeIndex;
+        this.pointIndex = pointIndex;
+        this.oldPoint = oldPoint; // Store the original point object {x, y}
+        this.newPoint = newPoint; // Store the new point object {x, y}
+    }
+
+    execute() {
+        if (this.tool.shapes[this.shapeIndex] && this.tool.shapes[this.shapeIndex].points[this.pointIndex]) {
+            this.tool.shapes[this.shapeIndex].points[this.pointIndex] = this.newPoint;
+        } else {
+             console.warn("EditShapePointCommand: Shape or point index out of bounds on execute/redo.");
+        }
+    }
+
+    undo() {
+         if (this.tool.shapes[this.shapeIndex] && this.tool.shapes[this.shapeIndex].points[this.pointIndex]) {
+            // Important: Restore the *exact* old point object if possible,
+            // but creating a new one with the same coords works too.
+            this.tool.shapes[this.shapeIndex].points[this.pointIndex] = this.oldPoint;
+        } else {
+             console.warn("EditShapePointCommand: Shape or point index out of bounds on undo.");
+        }
+    }
+}
+
+
+class ClearAllCommand extends Command {
+    constructor(tool, originalShapes) {
+        super();
+        this.tool = tool;
+        // Deep copy needed if shapes/points can be mutated elsewhere, but simple copy works if objects are stable
+        this.originalShapes = [...originalShapes];
+        // Consider saving palette state too if required
+    }
+
+    execute() {
+        this.tool.shapes = [];
+        this.tool.paletteColors = []; // Assuming clear also clears palette
+    }
+
+    undo() {
+        this.tool.shapes = [...this.originalShapes];
+        // Restore palette?
+        this.tool.paletteColors = [];
+        this.originalShapes.forEach(shape => this.tool.addPaletteColor(shape.color));
+    }
+}
+
+class ImportShapesCommand extends Command {
+    constructor(tool, importedShapes) {
+        super();
+        this.tool = tool;
+        // Store references to the actually added shapes
+        this.importedShapes = importedShapes; // This should be the array of shapes *added* by the import
+    }
+
+    execute() {
+        // Add the shapes back (for redo)
+        this.importedShapes.forEach(shape => {
+            if (!this.tool.shapes.includes(shape)) { // Avoid duplicates on redo
+                 this.tool.shapes.push(shape);
+                 this.tool.addPaletteColor(shape.color);
+            }
+        });
+    }
+
+    undo() {
+        // Remove the shapes that were added by this import command
+        this.importedShapes.forEach(shape => {
+            const index = this.tool.shapes.indexOf(shape);
+            if (index > -1) {
+                this.tool.shapes.splice(index, 1);
+            }
+        });
+        // Palette state handling? Maybe re-render palette based on remaining shapes.
+        this.tool.renderPaletteFromShapes(); // Need to implement this helper
+    }
+}
+
+// Command Manager (to be integrated into IsometricDrawingTool)
+class CommandManager {
+    constructor(tool) {
+        this.tool = tool;
+        this.undoStack = [];
+        this.redoStack = [];
+    }
+
+    execute(command) {
+        command.execute();
+        this.undoStack.push(command);
+        this.redoStack = []; // Clear redo stack on new action
+        this.tool.redrawAll();
+        this.updateButtonStates(); // Update undo/redo button enable state
+    }
+
+    undo() {
+        if (this.undoStack.length > 0) {
+            const command = this.undoStack.pop();
+            command.undo();
+            this.redoStack.push(command);
+            this.tool.redrawAll();
+            this.updateButtonStates();
+        } else {
+            console.log("Nothing to undo.");
+        }
+    }
+
+    redo() {
+        if (this.redoStack.length > 0) {
+            const command = this.redoStack.pop();
+            command.execute(); // Re-execute the command
+            this.undoStack.push(command);
+            this.tool.redrawAll();
+            this.updateButtonStates();
+        } else {
+            console.log("Nothing to redo.");
+        }
+    }
+
+    // Helper to enable/disable undo/redo buttons
+    updateButtonStates() {
+        const undoBtn = document.getElementById("undoBtn");
+        const redoBtn = document.getElementById("redoBtn"); // Assuming redoBtn exists
+        if (undoBtn) undoBtn.disabled = this.undoStack.length === 0;
+        if (redoBtn) redoBtn.disabled = this.redoStack.length === 0;
+    }
+
+    // Clears the history, e.g. when loading a new file without possibility of undoing the load itself
+    clearHistory() {
+        this.undoStack = [];
+        this.redoStack = [];
+        this.updateButtonStates();
+    }
+}
+
+// --- End Command Pattern ---
+
 class IsometricDrawingTool {
   constructor() {
     this.canvas = document.getElementById("isometricCanvas");
@@ -24,11 +260,15 @@ class IsometricDrawingTool {
     this.selectedShapeIndex = -1;
     this.selectedPointIndex = -1;
     this.dragPointRadius = 8; // Clickable radius around points in edit mode
+    this.dragStartPoint = null; // Store original point position for Edit command
 
     // Color Palette
     this.paletteContainer = document.getElementById("colorPaletteContainer");
     this.paletteColors = [];
     this.maxPaletteSize = 10;
+
+    // Command Manager
+    this.commandManager = new CommandManager(this);
 
     // Isometric projection angles and scaling
     this.angle = Math.PI / 6; // 30 degrees
@@ -45,6 +285,7 @@ class IsometricDrawingTool {
     this.initializeEventListeners();
     this.updateActiveToolButton(); // Set initial active button state
     this.renderPalette(); // Initial palette render
+    this.commandManager.updateButtonStates(); // Initialize button states
     this.redrawAll();
   }
 
@@ -79,7 +320,11 @@ class IsometricDrawingTool {
       .addEventListener("click", () => this.clearCanvas());
     document
       .getElementById("undoBtn")
-      .addEventListener("click", () => this.undoLastShape());
+      .addEventListener("click", () => this.undo()); // Changed from undoLastShape
+    document
+      .getElementById("redoBtn") // Add listener for redo
+      .addEventListener("click", () => this.redo());
+
     // Import listeners
     this.importBtn.addEventListener("click", () => this.svgFileInput.click());
     this.svgFileInput.addEventListener("change", (e) => this.handleFileImport(e));
@@ -153,6 +398,16 @@ class IsometricDrawingTool {
           this.ctx.restore();
         });
       });
+      // Highlight selected point if dragging
+      if (this.isDragging && this.selectedShapeIndex > -1 && this.selectedPointIndex > -1) {
+          const selectedPoint = this.shapes[this.selectedShapeIndex].points[this.selectedPointIndex];
+          this.ctx.save();
+          this.ctx.beginPath();
+          this.ctx.arc(selectedPoint.x, selectedPoint.y, this.dragPointRadius / 2 + 2, 0, Math.PI * 2); // Slightly larger highlight
+          this.ctx.fillStyle = "rgba(0, 122, 255, 0.3)"; // Semi-transparent blue fill
+          this.ctx.fill();
+          this.ctx.restore();
+      }
     }
   }
 
@@ -300,6 +555,7 @@ class IsometricDrawingTool {
       this.selectedShapeIndex = -1;
       this.selectedPointIndex = -1;
       this.isDragging = false;
+      this.dragStartPoint = null; // Reset drag start point
 
       for (let i = this.shapes.length - 1; i >= 0; i--) {
         const shape = this.shapes[i];
@@ -311,8 +567,10 @@ class IsometricDrawingTool {
             this.selectedShapeIndex = i;
             this.selectedPointIndex = j;
             this.isDragging = true;
+            // Store the original position *before* snapping starts in mouseMove
+            this.dragStartPoint = { ...point }; // Create a copy
             this.canvas.style.cursor = "grabbing"; // Indicate dragging
-            console.log(`Dragging shape ${i}, point ${j}`);
+            console.log(`Start dragging shape ${i}, point ${j}`);
             this.redrawAll(); // Redraw to potentially highlight point
             return; // Found a point, stop searching
           }
@@ -323,12 +581,16 @@ class IsometricDrawingTool {
     } else if (this.isDeleteMode) {
       // --- Delete Logic --- //
       let deleted = false;
+      // Iterate in reverse to delete topmost shape first
       for (let i = this.shapes.length - 1; i >= 0; i--) {
         const shape = this.shapes[i];
         if (this.isPointInPolygon({ x: canvasX, y: canvasY }, shape.points)) { // Use scaled coordinates
-          this.shapes.splice(i, 1); // Remove the clicked shape
+          const deletedShapeData = { ...shape, points: [...shape.points] }; // Deep copy for command
+          // Execute command - it will handle the actual deletion
+          const command = new DeleteShapeCommand(this, i, deletedShapeData);
+          this.commandManager.execute(command);
           deleted = true;
-          this.redrawAll();
+          // redrawAll is handled by commandManager
           break; // Stop after deleting the first shape found
         }
       }
@@ -345,12 +607,19 @@ class IsometricDrawingTool {
           shape.points.length > 2 &&
           this.isPointInPolygon({ x: canvasX, y: canvasY }, shape.points) // Use scaled coordinates
         ) {
-          // Update the color of the clicked shape
-          shape.color = this.currentColor;
-          this.addPaletteColor(this.currentColor);
-          filled = true;
-          this.redrawAll();
-          break; // Stop after filling the first shape found under the click
+          if (shape.color !== this.currentColor) { // Only execute if color changes
+            const oldColor = shape.color;
+            // Execute command - it will handle the color change & palette
+            const command = new FillShapeCommand(this, i, oldColor, this.currentColor);
+            this.commandManager.execute(command);
+            filled = true;
+             // redrawAll is handled by commandManager
+          } else {
+              // Color is already the target color, do nothing
+              console.log("Fill skipped: Shape already has the selected color.");
+              filled = true; // Treat as 'handled' to stop searching
+          }
+          break; // Stop after processing the first shape found under the click
         }
       }
       if (!filled) {
@@ -365,36 +634,45 @@ class IsometricDrawingTool {
         this.isDrawing = true;
         this.currentShapePoints = [clickedScreenPos];
         this.snapPoint = clickedScreenPos;
+        this.redrawAll(); // Redraw for drawing preview
       } else {
         const startPoint = this.currentShapePoints[0];
         const lastPoint =
           this.currentShapePoints[this.currentShapePoints.length - 1];
         const dx = clickedScreenPos.x - startPoint.x;
         const dy = clickedScreenPos.y - startPoint.y;
+        // Use a slightly larger tolerance for closing click to account for snapping
+        const closeToleranceSq = (this.dragPointRadius * 1.5) ** 2;
         const isClosing =
-          dx * dx + dy * dy < 25 && this.currentShapePoints.length >= 3;
+          dx * dx + dy * dy < closeToleranceSq && this.currentShapePoints.length >= 3;
 
         if (isClosing) {
-          // Finalize shape with current color
-          this.shapes.push({
-            points: [...this.currentShapePoints],
+          // Finalize shape - Create command
+          const shapeData = {
+            points: [...this.currentShapePoints], // Create copy
             color: this.currentColor,
-          });
-          this.addPaletteColor(this.currentColor);
+          };
+          const command = new AddShapeCommand(this, shapeData);
+          this.commandManager.execute(command); // Command handles adding shape and palette
+
           this.isDrawing = false;
           this.currentShapePoints = [];
           this.snapPoint = null;
+          // redrawAll is handled by commandManager
+
         } else {
+          // Add point if it's different from the last one
           if (
             clickedScreenPos.x !== lastPoint.x ||
             clickedScreenPos.y !== lastPoint.y
           ) {
             this.currentShapePoints.push(clickedScreenPos);
-            this.snapPoint = clickedScreenPos;
+            this.snapPoint = clickedScreenPos; // Update snap point for preview line
+             this.redrawAll(); // Redraw for drawing preview
           }
         }
       }
-      this.redrawAll();
+     // No redrawAll here unless it's starting or adding point, handled above/by command manager
     }
   }
 
@@ -407,9 +685,10 @@ class IsometricDrawingTool {
         const gridPos = this.screenToNearestGridPoint(canvasX, canvasY);
         const snappedScreenPos = this.gridToScreen(gridPos.x, gridPos.y);
 
-        // Update the point's position in the shape data
+        // Update the point's position *directly* for smooth visual feedback
+        // The command will be created on mouseUp with the final position
         this.shapes[this.selectedShapeIndex].points[this.selectedPointIndex] = snappedScreenPos;
-        this.redrawAll();
+        this.redrawAll(); // Redraw frequently while dragging
       }
       return; // Don't do other mouse move logic while dragging
     }
@@ -465,40 +744,80 @@ class IsometricDrawingTool {
   handleMouseOut() {
     // Reset cursor to the default for the active tool when mouse leaves
     this.updateCursor();
-    this.isDragging = false; // Stop dragging if mouse leaves canvas
+
+    if (this.isDragging && this.isEditMode) {
+        // If dragging and mouse leaves, treat it like a mouseup cancel/completion
+        this.handleMouseUp(null); // Pass null or a simulated event if needed
+    }
 
     if (!this.isFillMode && !this.isDeleteMode && !this.isEditMode && this.isDrawing) {
-      this.cancelDrawing();
+       // Don't cancel drawing automatically on mouse out, user might come back in
+       // this.cancelDrawing(); // Keep this commented out or remove
     }
-    if (!this.isFillMode && !this.isDeleteMode && !this.isEditMode) {
-      this.snapPoint = null;
-      this.redrawAll();
-    }
+
+    // Clear snap point only if NOT drawing and NOT editing (where it's irrelevant)
+     if (!this.isDrawing && !this.isEditMode) {
+        this.snapPoint = null;
+        this.redrawAll();
+     }
   }
 
-  // Add MouseUp handler to stop dragging
+  // Add MouseUp handler to stop dragging and create Edit command
   handleMouseUp(e) {
-      if (e.button !== 0) return;
+      // Allow triggering even if e is null (from handleMouseOut)
+      if (e && e.button !== 0) return;
+
       if (this.isDragging && this.isEditMode) {
-          console.log(`Finished dragging shape ${this.selectedShapeIndex}, point ${this.selectedPointIndex}`);
+          if (this.selectedShapeIndex > -1 && this.selectedPointIndex > -1 && this.dragStartPoint) {
+              const finalPoint = this.shapes[this.selectedShapeIndex].points[this.selectedPointIndex];
+              // Only create command if the point actually moved
+              if (finalPoint.x !== this.dragStartPoint.x || finalPoint.y !== this.dragStartPoint.y) {
+                  const command = new EditShapePointCommand(
+                      this,
+                      this.selectedShapeIndex,
+                      this.selectedPointIndex,
+                      this.dragStartPoint, // Original position
+                      { ...finalPoint } // Final position (copy)
+                  );
+                  this.commandManager.execute(command); // Command manager handles redraw
+                  console.log(`Finished dragging shape ${this.selectedShapeIndex}, point ${this.selectedPointIndex}. Command created.`);
+              } else {
+                   console.log("Edit drag ended, but point did not move.");
+                   // Redraw to remove any potential drag highlighting if needed
+                   this.redrawAll();
+              }
+          } else {
+              // Drag ended unexpectedly? Just ensure state is clean.
+               this.redrawAll();
+          }
+
+          // Reset dragging state regardless of whether command was created
           this.isDragging = false;
           this.selectedShapeIndex = -1;
           this.selectedPointIndex = -1;
+          this.dragStartPoint = null;
           this.updateCursor(); // Reset cursor after drag
-          this.redrawAll(); // Final redraw after drag
+          // redrawAll is handled by commandManager or explicitly above
       }
   }
 
   handleKeyDown(e) {
-    if (e.key === "Escape") {
+    // Check for Ctrl/Cmd key based on platform
+    const isModKey = e.ctrlKey || e.metaKey;
+
+    if (isModKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault(); // Prevent browser default undo
+        if (e.shiftKey) {
+            this.redo(); // Ctrl/Cmd + Shift + Z for redo
+        } else {
+            this.undo(); // Ctrl/Cmd + Z for undo
+        }
+    } else if (e.key === "Escape") {
       if (this.isDrawing) {
         this.cancelDrawing();
-      } else if (this.isFillMode) {
-        this.setActiveTool("draw"); // Escape from Fill goes back to Draw
-      } else if (this.isDeleteMode) {
-        this.setActiveTool("draw"); // Escape from Delete goes back to Draw
-      } else if (this.isEditMode) {
-        this.setActiveTool("draw"); // Escape from Edit goes back to Draw
+      } else if (this.isFillMode || this.isDeleteMode || this.isEditMode) {
+         // Escape returns to draw tool
+         this.setActiveTool("draw");
       }
     }
   }
@@ -508,23 +827,40 @@ class IsometricDrawingTool {
     this.isDrawing = false;
     this.currentShapePoints = [];
     this.snapPoint = null;
+    // No command needed, just visual state reset
     this.redrawAll();
   }
 
   clearCanvas() {
-    this.shapes = [];
-    this.cancelDrawing();
+    if (this.shapes.length > 0) { // Only create command if there's something to clear
+        const originalShapes = this.shapes.map(s => ({ ...s, points: [...s.points] })); // Deep copy for command
+        const command = new ClearAllCommand(this, originalShapes);
+        this.commandManager.execute(command);
+        // Command handles actual clearing and redraw
+    }
+    this.cancelDrawing(); // Also cancel any partial drawing
     this.setActiveTool("draw"); // Reset to draw tool on clear
-    this.redrawAll();
   }
 
-  undoLastShape() {
+  undo() {
     if (this.isDrawing) {
-      this.cancelDrawing(); // Cancel current drawing first
-    } else if (this.shapes.length > 0) {
-      this.shapes.pop();
-      this.redrawAll();
+      this.cancelDrawing(); // Cancel current drawing first before undoing previous action
+    } else {
+      this.commandManager.undo();
     }
+     // Ensure tool mode is consistent after undo (e.g., if undoing a fill, stay in fill mode?)
+     // This might require commands to store/restore the tool state, adding complexity.
+     // For now, keep it simple: undo/redo don't change the active tool.
+     this.updateCursor(); // Update cursor in case state changed
+     this.redrawAll(); // Ensure redraw happens AFTER command finishes
+  }
+
+  // Add Redo method
+  redo() {
+      this.commandManager.redo();
+       // Ensure tool mode is consistent after redo
+       this.updateCursor();
+       this.redrawAll();
   }
 
   exportSVG() {
@@ -620,16 +956,14 @@ class IsometricDrawingTool {
       // Default to draw mode (isDrawing is handled by clicks)
     }
 
-    // Trigger redraw if entering or leaving edit mode
+    // Trigger redraw if entering or leaving edit mode to show/hide handles
     if (this.isEditMode || wasEditMode) {
       this.redrawAll();
     }
 
     // If cancelling a drawing was needed (e.g., switching tool mid-draw)
     if (this.currentShapePoints.length > 0 && toolName !== "draw") {
-      this.currentShapePoints = [];
-      this.snapPoint = null;
-      this.redrawAll(); // Redraw to remove preview
+       this.cancelDrawing(); // Use cancelDrawing to reset drawing state
     }
 
     this.updateActiveToolButton();
@@ -715,6 +1049,16 @@ class IsometricDrawingTool {
     });
   }
 
+  // Helper to rebuild palette based on current shapes
+  renderPaletteFromShapes() {
+      const uniqueColors = new Set(this.shapes.map(shape => shape.color));
+      // Optionally preserve existing order or sort? Keep simple for now.
+      // Limit palette size if needed, potentially removing least frequent?
+      // For simplicity, just rebuild from current shapes up to max size.
+      this.paletteColors = Array.from(uniqueColors).slice(-this.maxPaletteSize);
+      this.renderPalette();
+  }
+
   // --- SVG Import --- //
   handleFileImport(event) {
     const file = event.target.files[0];
@@ -728,7 +1072,16 @@ class IsometricDrawingTool {
     reader.onload = (e) => {
       const svgContent = e.target.result;
       try {
-        this.parseAndLoadSVG(svgContent);
+        const importedShapesData = this.parseSVGContent(svgContent); // Renamed parsing logic
+        if (importedShapesData && importedShapesData.length > 0) {
+            // Create command for the import action
+            const command = new ImportShapesCommand(this, importedShapesData);
+            this.commandManager.execute(command);
+            // Command manager handles adding shapes, palette, redraw
+             console.log(`Imported ${importedShapesData.length} shapes via command.`);
+        } else {
+            console.log("No valid shapes found or parsed from SVG.");
+        }
       } catch (error) {
         console.error("Error parsing SVG:", error);
         alert("Failed to parse the SVG file. It might be invalid or not generated by this tool.");
@@ -743,69 +1096,52 @@ class IsometricDrawingTool {
     reader.readAsText(file);
   }
 
-  parseAndLoadSVG(svgContent) {
+  // Renamed and refactored parsing logic to return shape data
+  parseSVGContent(svgContent) {
     const parser = new DOMParser();
     const svgDoc = parser.parseFromString(svgContent, "image/svg+xml");
 
     const shapesGroup = svgDoc.getElementById('shapes');
-    if (!shapesGroup) {
-      console.warn("Could not find the 'shapes' group in the SVG. Is this SVG from this tool?");
-      // Optionally, try finding any polygon/polyline?
-      // For now, we'll assume the structure is correct.
-      return;
-    }
-
-    const importedRawShapes = [];
+    // Fallback to querying all polygons/polylines if group not found
     const shapeElements = shapesGroup ? shapesGroup.querySelectorAll('polygon, polyline') : svgDoc.querySelectorAll('polygon, polyline');
 
-    if (shapeElements.length === 0) {
-      console.log("No shapes found in the SVG.");
-      return;
+    if (!shapeElements || shapeElements.length === 0) {
+      console.warn("No 'shapes' group or polygon/polyline elements found in the SVG.");
+      return []; // Return empty array if nothing found
     }
 
+    const parsedShapes = [];
+
     shapeElements.forEach(el => {
-      const pointsString = el.getAttribute('points').trim();
+      const pointsString = el.getAttribute('points')?.trim();
+      if (!pointsString) {
+          console.warn("Shape element missing 'points' attribute.", el);
+          return; // Skip elements without points
+      }
       const color = el.getAttribute('fill') || el.getAttribute('stroke') || '#000000'; // Fallback color
       const points = pointsString.split(/\s+/).map(pair => {
         const [xStr, yStr] = pair.split(',');
         const x = parseFloat(xStr);
         const y = parseFloat(yStr);
         if (!isNaN(x) && !isNaN(y)) {
-           return { x, y };
+           // Snap imported points to the grid immediately
+           const gridPos = this.screenToNearestGridPoint(x, y);
+           return this.gridToScreen(gridPos.x, gridPos.y);
         } else {
-           console.warn(`Invalid point data found: ${pair}`);
+           console.warn(`Invalid point data found and skipped: ${pair}`);
            return null; // Skip invalid points
         }
       }).filter(p => p !== null);
 
       if (points.length > 1) { // Need at least 2 points for a line/shape
-          importedRawShapes.push({ points: points, color: color });
+          parsedShapes.push({ points: points, color: color });
+      } else if (points.length > 0) {
+           console.warn("Shape discarded during import due to insufficient valid points after parsing/snapping.");
       }
     });
 
-    if (importedRawShapes.length === 0) {
-      console.log("No valid shapes could be parsed from the SVG.");
-      return;
-    }
-
-    // Snap each point individually and add to main shapes array
-    importedRawShapes.forEach(rawShape => {
-      const finalPoints = rawShape.points.map(p => {
-          const gridPos = this.screenToNearestGridPoint(p.x, p.y);
-          return this.gridToScreen(gridPos.x, gridPos.y);
-      });
-
-      if (finalPoints.length > 1) { // Ensure we still have enough points after potential filtering
-          this.shapes.push({ points: finalPoints, color: rawShape.color });
-          // Add color to palette
-          this.addPaletteColor(rawShape.color);
-      } else {
-          console.warn("Shape discarded during import snapping due to insufficient points.");
-      }
-    });
-
-    console.log(`Imported and snapped ${this.shapes.length} shapes.`);
-    this.redrawAll();
+     // This function now only *parses* and *snaps*. The command handles adding to state.
+     return parsedShapes;
   }
 }
 
