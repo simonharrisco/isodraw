@@ -122,6 +122,12 @@ button:active {
     color: var(--button-text-color);
 }
 
+#editToolBtn.active {
+    background-color: var(--primary-accent);
+    border-color: var(--primary-accent);
+    color: var(--button-text-color);
+}
+
 /* --- Color Picker --- */
 .color-picker-group input[type="color"] {
     -webkit-appearance: none;
@@ -136,6 +142,7 @@ button:active {
     overflow: hidden;
     border: 1px solid var(--border-color);
     transition: border-color 0.15s ease;
+    display: block;
 }
 
 .color-picker-group input[type="color"]:hover {
@@ -155,6 +162,18 @@ button:active {
 .color-picker-group input[type="color"]::-moz-color-swatch {
     border: none;
     border-radius: 50%;
+}
+
+/* --- Edit Mode Point Indicator --- */
+.draggable-point {
+    fill: #ffffff; /* White fill */
+    stroke: var(--primary-accent); /* Blue border */
+    stroke-width: 1.5px;
+    cursor: grab;
+}
+
+.draggable-point:active {
+    cursor: grabbing;
 }
 
 /* --- Canvas --- */

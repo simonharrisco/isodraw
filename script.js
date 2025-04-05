@@ -11,9 +11,17 @@ class IsometricDrawingTool {
     this.fillToggleBtn = document.getElementById("fillToggleBtn");
     this.deleteToggleBtn = document.getElementById("deleteToggleBtn"); // Get delete button
     this.drawToolBtn = document.getElementById("drawToolBtn"); // Get Draw button
+    this.editToolBtn = document.getElementById("editToolBtn"); // Get Edit button
     this.currentColor = this.colorPicker.value; // Initialize with default color
     this.isFillMode = false; // Track fill tool state
     this.isDeleteMode = false; // Track delete tool state
+    this.isEditMode = false; // Track edit tool state
+
+    // Dragging state for Edit mode
+    this.isDragging = false;
+    this.selectedShapeIndex = -1;
+    this.selectedPointIndex = -1;
+    this.dragPointRadius = 8; // Clickable radius around points in edit mode
 
     // Color Palette
     this.paletteContainer = document.getElementById("colorPaletteContainer");
@@ -42,6 +50,7 @@ class IsometricDrawingTool {
     this.canvas.addEventListener("mousedown", (e) => this.handleMouseDown(e));
     this.canvas.addEventListener("mousemove", (e) => this.handleMouseMove(e));
     this.canvas.addEventListener("mouseout", () => this.handleMouseOut());
+    this.canvas.addEventListener("mouseup", (e) => this.handleMouseUp(e)); // Add mouseup listener
     document.addEventListener("keydown", (e) => this.handleKeyDown(e));
 
     this.colorPicker.addEventListener("input", (e) => {
@@ -58,6 +67,7 @@ class IsometricDrawingTool {
     this.deleteToggleBtn.addEventListener("click", () =>
       this.setActiveTool("delete")
     );
+    this.editToolBtn.addEventListener("click", () => this.setActiveTool("edit")); // Listener for Edit button
 
     document
       .getElementById("exportBtn")
@@ -122,6 +132,23 @@ class IsometricDrawingTool {
     this.drawShapes();
     this.drawCurrentShape(); // Draw the shape currently being created
     this.drawSnapPoint(); // Draw the indicator for the current snap point
+
+    // Draw draggable points in edit mode
+    if (this.isEditMode) {
+      this.shapes.forEach(({ points }) => {
+        points.forEach(point => {
+          this.ctx.save();
+          this.ctx.beginPath();
+          this.ctx.arc(point.x, point.y, this.dragPointRadius / 2, 0, Math.PI * 2);
+          this.ctx.fillStyle = "#ffffff"; // White fill
+          this.ctx.strokeStyle = "#007aff"; // Blue border
+          this.ctx.lineWidth = 1.5;
+          this.ctx.fill();
+          this.ctx.stroke();
+          this.ctx.restore();
+        });
+      });
+    }
   }
 
   drawGrid() {
@@ -263,8 +290,33 @@ class IsometricDrawingTool {
     if (e.button !== 0) return;
     const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(e); // Use scaled coordinates
 
-    if (this.isDeleteMode) {
-      // --- Delete Logic ---
+    if (this.isEditMode) {
+      // --- Edit Mode: Check for point click --- //
+      this.selectedShapeIndex = -1;
+      this.selectedPointIndex = -1;
+      this.isDragging = false;
+
+      for (let i = this.shapes.length - 1; i >= 0; i--) {
+        const shape = this.shapes[i];
+        for (let j = 0; j < shape.points.length; j++) {
+          const point = shape.points[j];
+          const dx = canvasX - point.x;
+          const dy = canvasY - point.y;
+          if (dx * dx + dy * dy < this.dragPointRadius * this.dragPointRadius) {
+            this.selectedShapeIndex = i;
+            this.selectedPointIndex = j;
+            this.isDragging = true;
+            this.canvas.style.cursor = "grabbing"; // Indicate dragging
+            console.log(`Dragging shape ${i}, point ${j}`);
+            this.redrawAll(); // Redraw to potentially highlight point
+            return; // Found a point, stop searching
+          }
+        }
+      }
+      // If no point was clicked, do nothing else in edit mode mousedown
+      return;
+    } else if (this.isDeleteMode) {
+      // --- Delete Logic --- //
       let deleted = false;
       for (let i = this.shapes.length - 1; i >= 0; i--) {
         const shape = this.shapes[i];
@@ -344,48 +396,92 @@ class IsometricDrawingTool {
   handleMouseMove(e) {
     const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(e); // Use scaled coordinates
 
-    if (this.isFillMode || this.isDeleteMode) {
-      let shapeHovered = false;
+    if (this.isDragging && this.isEditMode) {
+      // --- Edit Mode: Dragging Point --- //
+      if (this.selectedShapeIndex !== -1 && this.selectedPointIndex !== -1) {
+        const gridPos = this.screenToNearestGridPoint(canvasX, canvasY);
+        const snappedScreenPos = this.gridToScreen(gridPos.x, gridPos.y);
+
+        // Update the point's position in the shape data
+        this.shapes[this.selectedShapeIndex].points[this.selectedPointIndex] = snappedScreenPos;
+        this.redrawAll();
+      }
+      return; // Don't do other mouse move logic while dragging
+    }
+
+    // --- Update Cursor and Snap Point for other modes --- //
+    let cursorStyle = "default"; // Default cursor
+    let shapeHovered = false;
+
+    if (this.isEditMode) {
+      // Check if hovering over a draggable point
+      let pointHovered = false;
+      for (const shape of this.shapes) {
+        for (const point of shape.points) {
+          const dx = canvasX - point.x;
+          const dy = canvasY - point.y;
+          if (dx * dx + dy * dy < this.dragPointRadius * this.dragPointRadius) {
+            pointHovered = true;
+            break;
+          }
+        }
+        if (pointHovered) break;
+      }
+      cursorStyle = pointHovered ? "grab" : "default";
+      this.snapPoint = null; // No snapping preview in edit mode unless dragging
+      this.redrawAll(); // Redraw necessary if cursor changes/highlights point maybe?
+    } else if (this.isFillMode || this.isDeleteMode) {
       // Check shapes in reverse order (topmost first)
       for (let i = this.shapes.length - 1; i >= 0; i--) {
-        if (
-          this.isPointInPolygon(
-            { x: canvasX, y: canvasY }, // Use scaled coordinates
-            this.shapes[i].points
-          )
-        ) {
+        if (this.isPointInPolygon({ x: canvasX, y: canvasY }, this.shapes[i].points)) {
           shapeHovered = true;
           break;
         }
       }
-
       if (this.isFillMode) {
-        this.canvas.style.cursor = shapeHovered ? "crosshair" : "pointer";
+        cursorStyle = shapeHovered ? "crosshair" : "pointer";
       } else if (this.isDeleteMode) {
-        this.canvas.style.cursor = shapeHovered ? "not-allowed" : "pointer";
+        cursorStyle = shapeHovered ? "not-allowed" : "pointer";
       }
-      // Do not update snap point or redraw in these modes
-      return;
+      this.snapPoint = null; // No snapping preview in these modes
+      // No redraw needed just for hover cursor change typically
+    } else {
+      // --- Default Draw Mode MouseMove Logic --- //
+      const gridPos = this.screenToNearestGridPoint(canvasX, canvasY);
+      const snappedScreenPos = this.gridToScreen(gridPos.x, gridPos.y);
+      this.snapPoint = snappedScreenPos;
+      cursorStyle = "crosshair"; // Use crosshair when drawing
+      this.redrawAll(); // Redraw for snap point updates in Draw mode
     }
 
-    // --- Default Draw Mode MouseMove Logic ---
-    const gridPos = this.screenToNearestGridPoint(canvasX, canvasY); // Use scaled coordinates
-    const snappedScreenPos = this.gridToScreen(gridPos.x, gridPos.y);
-    this.snapPoint = snappedScreenPos;
-    this.redrawAll(); // Only redraw for snap point updates in Draw mode
+    this.canvas.style.cursor = cursorStyle;
   }
 
   handleMouseOut() {
     // Reset cursor to the default for the active tool when mouse leaves
     this.updateCursor();
+    this.isDragging = false; // Stop dragging if mouse leaves canvas
 
-    if (!this.isFillMode && !this.isDeleteMode && this.isDrawing) {
+    if (!this.isFillMode && !this.isDeleteMode && !this.isEditMode && this.isDrawing) {
       this.cancelDrawing();
     }
-    if (!this.isFillMode && !this.isDeleteMode) {
+    if (!this.isFillMode && !this.isDeleteMode && !this.isEditMode) {
       this.snapPoint = null;
       this.redrawAll();
     }
+  }
+
+  // Add MouseUp handler to stop dragging
+  handleMouseUp(e) {
+      if (e.button !== 0) return;
+      if (this.isDragging && this.isEditMode) {
+          console.log(`Finished dragging shape ${this.selectedShapeIndex}, point ${this.selectedPointIndex}`);
+          this.isDragging = false;
+          this.selectedShapeIndex = -1;
+          this.selectedPointIndex = -1;
+          this.updateCursor(); // Reset cursor after drag
+          this.redrawAll(); // Final redraw after drag
+      }
   }
 
   handleKeyDown(e) {
@@ -396,6 +492,8 @@ class IsometricDrawingTool {
         this.setActiveTool("draw"); // Escape from Fill goes back to Draw
       } else if (this.isDeleteMode) {
         this.setActiveTool("draw"); // Escape from Delete goes back to Draw
+      } else if (this.isEditMode) {
+        this.setActiveTool("draw"); // Escape from Edit goes back to Draw
       }
     }
   }
@@ -494,18 +592,32 @@ class IsometricDrawingTool {
 
   // --- Mode Management ---
   setActiveTool(toolName) {
+    // Store previous mode to check if we exited Edit mode
+    const wasEditMode = this.isEditMode;
+
     // Deactivate all modes first
     this.isDrawing = false; // Cancel any ongoing drawing action
     this.isFillMode = false;
     this.isDeleteMode = false;
+    this.isEditMode = false; // Deactivate edit mode
+    this.isDragging = false; // Ensure dragging stops when switching tools
+    this.selectedShapeIndex = -1;
+    this.selectedPointIndex = -1;
 
     // Activate the selected mode
     if (toolName === "fill") {
       this.isFillMode = true;
     } else if (toolName === "delete") {
       this.isDeleteMode = true;
+    } else if (toolName === "edit") { // Handle edit mode activation
+      this.isEditMode = true;
     } else {
       // Default to draw mode (isDrawing is handled by clicks)
+    }
+
+    // Trigger redraw if entering or leaving edit mode
+    if (this.isEditMode || wasEditMode) {
+      this.redrawAll();
     }
 
     // If cancelling a drawing was needed (e.g., switching tool mid-draw)
@@ -522,20 +634,28 @@ class IsometricDrawingTool {
   updateActiveToolButton() {
     this.drawToolBtn.classList.toggle(
       "active",
-      !this.isFillMode && !this.isDeleteMode
+      !this.isFillMode && !this.isDeleteMode && !this.isEditMode
     );
     this.fillToggleBtn.classList.toggle("active", this.isFillMode);
     this.deleteToggleBtn.classList.toggle("active", this.isDeleteMode);
+    this.editToolBtn.classList.toggle("active", this.isEditMode); // Update edit button
   }
 
   updateCursor() {
-    if (this.isDeleteMode) {
-      this.canvas.style.cursor = "not-allowed";
+    if (this.isDragging) {
+      this.canvas.style.cursor = "grabbing";
+    } else if (this.isEditMode) {
+      // In edit mode, default is 'grab' maybe, or check hover in mouseMove
+      // Let mouseMove handle the specific 'grab' on point hover
+      this.canvas.style.cursor = "default";
+    } else if (this.isDeleteMode) {
+      this.canvas.style.cursor = "not-allowed"; // Or let mouseMove handle hover state
     } else if (this.isFillMode) {
-      this.canvas.style.cursor = "crosshair";
+      this.canvas.style.cursor = "crosshair"; // Or let mouseMove handle hover state
     } else {
-      this.canvas.style.cursor = "default"; // Default for drawing
+      this.canvas.style.cursor = "crosshair"; // Default for drawing is crosshair
     }
+    // Note: handleMouseMove provides more specific cursor updates on hover
   }
 
   // --- Point in Polygon Check ---
