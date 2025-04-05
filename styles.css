@@ -65,7 +65,6 @@ body {
     padding: 12px 15px;
     border-radius: var(--border-radius);
     border: 1px solid var(--border-color);
-    margin-bottom: 20px;
     flex-wrap: wrap;
     gap: 15px;
     flex-shrink: 0;
@@ -202,7 +201,6 @@ button:active {
     padding: 10px 15px;
     border-radius: var(--border-radius);
     border: 1px solid var(--border-color);
-    margin-bottom: 20px;
     flex-wrap: wrap; /* Allow wrapping if too many colors */
     min-height: 50px; /* Ensure it has some height even when empty */
     flex-shrink: 0;

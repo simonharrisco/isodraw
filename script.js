@@ -752,8 +752,7 @@ class IsometricDrawingTool {
       console.warn("Could not find the 'shapes' group in the SVG. Is this SVG from this tool?");
       // Optionally, try finding any polygon/polyline?
       // For now, we'll assume the structure is correct.
-      // return;
-      // Fallback: try finding any relevant elements
+      return;
     }
 
     const importedRawShapes = [];
@@ -764,8 +763,6 @@ class IsometricDrawingTool {
       return;
     }
 
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
     shapeElements.forEach(el => {
       const pointsString = el.getAttribute('points').trim();
       const color = el.getAttribute('fill') || el.getAttribute('stroke') || '#000000'; // Fallback color
@@ -774,11 +771,6 @@ class IsometricDrawingTool {
         const x = parseFloat(xStr);
         const y = parseFloat(yStr);
         if (!isNaN(x) && !isNaN(y)) {
-           // Update bounds
-           minX = Math.min(minX, x);
-           minY = Math.min(minY, y);
-           maxX = Math.max(maxX, x);
-           maxY = Math.max(maxY, y);
            return { x, y };
         } else {
            console.warn(`Invalid point data found: ${pair}`);
@@ -796,27 +788,23 @@ class IsometricDrawingTool {
       return;
     }
 
-    // Calculate center of imported shapes' bounding box
-    const importedCenterX = minX + (maxX - minX) / 2;
-    const importedCenterY = minY + (maxY - minY) / 2;
-
-    // Calculate canvas center
-    const canvasCenterX = this.canvas.width / 2;
-    const canvasCenterY = this.canvas.height / 2;
-
-    // Calculate offset needed to move imported center to canvas center
-    const offsetX = canvasCenterX - importedCenterX;
-    const offsetY = canvasCenterY - importedCenterY;
-
-    // Apply offset and add to main shapes array
+    // Snap each point individually and add to main shapes array
     importedRawShapes.forEach(rawShape => {
-      const finalPoints = rawShape.points.map(p => ({ x: p.x + offsetX, y: p.y + offsetY }));
-      this.shapes.push({ points: finalPoints, color: rawShape.color });
-      // Add color to palette
-      this.addPaletteColor(rawShape.color);
+      const finalPoints = rawShape.points.map(p => {
+          const gridPos = this.screenToNearestGridPoint(p.x, p.y);
+          return this.gridToScreen(gridPos.x, gridPos.y);
+      });
+
+      if (finalPoints.length > 1) { // Ensure we still have enough points after potential filtering
+          this.shapes.push({ points: finalPoints, color: rawShape.color });
+          // Add color to palette
+          this.addPaletteColor(rawShape.color);
+      } else {
+          console.warn("Shape discarded during import snapping due to insufficient points.");
+      }
     });
 
-    console.log(`Imported ${importedRawShapes.length} shapes.`);
+    console.log(`Imported and snapped ${this.shapes.length} shapes.`);
     this.redrawAll();
   }
 }
