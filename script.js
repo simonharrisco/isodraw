@@ -15,6 +15,11 @@ class IsometricDrawingTool {
     this.isFillMode = false; // Track fill tool state
     this.isDeleteMode = false; // Track delete tool state
 
+    // Color Palette
+    this.paletteContainer = document.getElementById("colorPaletteContainer");
+    this.paletteColors = [];
+    this.maxPaletteSize = 10;
+
     // Isometric projection angles and scaling
     this.angle = Math.PI / 6; // 30 degrees
     this.scaleX = Math.cos(this.angle);
@@ -29,6 +34,7 @@ class IsometricDrawingTool {
     // Initialize event listeners
     this.initializeEventListeners();
     this.updateActiveToolButton(); // Set initial active button state
+    this.renderPalette(); // Initial palette render
     this.redrawAll();
   }
 
@@ -284,6 +290,7 @@ class IsometricDrawingTool {
         ) {
           // Update the color of the clicked shape
           shape.color = this.currentColor;
+          this.addPaletteColor(this.currentColor);
           filled = true;
           this.redrawAll();
           break; // Stop after filling the first shape found under the click
@@ -316,6 +323,7 @@ class IsometricDrawingTool {
             points: [...this.currentShapePoints],
             color: this.currentColor,
           });
+          this.addPaletteColor(this.currentColor);
           this.isDrawing = false;
           this.currentShapePoints = [];
           this.snapPoint = null;
@@ -546,6 +554,40 @@ class IsometricDrawingTool {
       if (intersect) inside = !inside;
     }
     return inside;
+  }
+
+  // --- Palette Management ---
+  addPaletteColor(color) {
+    const existingIndex = this.paletteColors.indexOf(color);
+    if (existingIndex !== -1) {
+      // Move existing color to the end (most recent)
+      this.paletteColors.splice(existingIndex, 1);
+    }
+    this.paletteColors.push(color);
+
+    // Enforce max size
+    if (this.paletteColors.length > this.maxPaletteSize) {
+      this.paletteColors.shift(); // Remove the oldest color
+    }
+
+    this.renderPalette();
+  }
+
+  renderPalette() {
+    this.paletteContainer.innerHTML = ''; // Clear existing swatches
+    this.paletteColors.forEach(color => {
+      const swatch = document.createElement('div');
+      swatch.classList.add('palette-swatch');
+      swatch.style.backgroundColor = color;
+      swatch.title = `Select color ${color}`;
+      swatch.addEventListener('click', () => {
+        this.colorPicker.value = color;
+        this.currentColor = color;
+        // Optionally switch back to draw tool when selecting a color?
+        // this.setActiveTool('draw');
+      });
+      this.paletteContainer.appendChild(swatch);
+    });
   }
 }
 
