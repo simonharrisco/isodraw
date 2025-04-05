@@ -20,20 +20,25 @@ class AddShapeCommand extends Command {
     constructor(tool, shapeData) {
         super();
         this.tool = tool;
-        this.shapeData = shapeData; // { points: [...], color: '...' }
+        this.shapeData = shapeData; // { points: [...], color: '...', id: ... } - ID added in execute
     }
 
     execute() {
+        // Assign unique ID if it doesn't have one (e.g., on first execution)
+        if (this.shapeData.id === undefined) {
+            this.shapeData.id = this.tool.getNextShapeId();
+        }
         this.tool.shapes.push(this.shapeData);
-        this.tool.addPaletteColor(this.shapeData.color); // Ensure palette updates
+        this.tool.addPaletteColor(this.shapeData.color);
     }
 
     undo() {
-        const index = this.tool.shapes.lastIndexOf(this.shapeData);
+        // Find shape by ID
+        const index = this.tool.shapes.findIndex(shape => shape.id === this.shapeData.id);
         if (index > -1) {
             this.tool.shapes.splice(index, 1);
-            // Note: Palette undo is tricky; maybe don't undo palette changes?
-            // Or implement a more complex palette state management. For now, keep it simple.
+        } else {
+            console.warn(`AddShapeCommand undo: Shape with ID ${this.shapeData.id} not found.`);
         }
     }
 }
@@ -42,30 +47,32 @@ class DeleteShapeCommand extends Command {
     constructor(tool, shapeIndex, deletedShape) {
         super();
         this.tool = tool;
-        this.shapeIndex = shapeIndex;
-        this.deletedShape = deletedShape;
+        this.shapeIndex = shapeIndex; // Store index at time of deletion
+        this.deletedShape = deletedShape; // Must include ID: { points: [...], color: '...', id: ... }
     }
 
     execute() {
-        // Execute performs the deletion (both initially and on redo)
-        // It relies on the shapeIndex being correct relative to the state *before* this command executed.
+        // Use the index determined *at the time the command was created* for execute/redo
+        // We trust this index was correct relative to the state *before* execution.
         if (this.shapeIndex >= 0 && this.shapeIndex < this.tool.shapes.length) {
-            // Check if the shape at the index *might* be the one we intend to delete.
-            // This is a basic sanity check, as object identity won't match the copy.
-            // If the deletedShape copy matches color/point count, it increases confidence.
-            // For now, we primarily trust the index passed to the constructor.
-            const actuallyDeleted = this.tool.shapes.splice(this.shapeIndex, 1);
-            // console.log(`DeleteShapeCommand executed: Spliced at index ${this.shapeIndex}`);
+            // Optional: Double-check if the shape at the index has the expected ID
+            if (this.tool.shapes[this.shapeIndex].id === this.deletedShape.id) {
+                this.tool.shapes.splice(this.shapeIndex, 1);
+                // console.log(`DeleteShapeCommand executed: Spliced shape ID ${this.deletedShape.id} at index ${this.shapeIndex}`);
+            } else {
+                 console.warn(`DeleteShapeCommand execute: Shape ID mismatch at index ${this.shapeIndex}. Expected ${this.deletedShape.id}, found ${this.tool.shapes[this.shapeIndex]?.id}. Deleting based on index anyway.`);
+                 // Still attempt deletion based on original index, though state might be inconsistent
+                 this.tool.shapes.splice(this.shapeIndex, 1);
+            }
         } else {
-            // This case might happen if other commands (like Clear) modified the array drastically before a redo.
-            console.warn(`DeleteShapeCommand execute: Invalid or outdated shape index ${this.shapeIndex} for current shapes length ${this.tool.shapes.length}. Cannot delete.`);
+            console.warn(`DeleteShapeCommand execute: Invalid or outdated shape index ${this.shapeIndex} for shapes length ${this.tool.shapes.length}. Cannot delete.`);
         }
     }
 
     undo() {
-        // Add the shape back at its original index
+        // Restore the shape at its original index
         this.tool.shapes.splice(this.shapeIndex, 0, this.deletedShape);
-        this.tool.addPaletteColor(this.deletedShape.color); // Add color back to palette
+        this.tool.addPaletteColor(this.deletedShape.color);
     }
 }
 
@@ -127,9 +134,8 @@ class ClearAllCommand extends Command {
     constructor(tool, originalShapes) {
         super();
         this.tool = tool;
-        // Deep copy needed if shapes/points can be mutated elsewhere, but simple copy works if objects are stable
-        this.originalShapes = [...originalShapes];
-        // Consider saving palette state too if required
+        // Ensure IDs are part of the copied shapes
+        this.originalShapes = originalShapes; // Already a deep copy from clearCanvas
     }
 
     execute() {
@@ -146,33 +152,43 @@ class ClearAllCommand extends Command {
 }
 
 class ImportShapesCommand extends Command {
-    constructor(tool, importedShapes) {
+    constructor(tool, importedShapesData) { // importedShapesData is { points, color } without IDs initially
         super();
         this.tool = tool;
-        // Store references to the actually added shapes
-        this.importedShapes = importedShapes; // This should be the array of shapes *added* by the import
+        // Store the shapes *with IDs* that will be added by this command
+        this.shapesToAdd = importedShapesData.map(shapeData => ({
+            ...shapeData,
+            id: this.tool.getNextShapeId() // Assign IDs immediately when command is created
+        }));
     }
 
     execute() {
-        // Add the shapes back (for redo)
-        this.importedShapes.forEach(shape => {
-            if (!this.tool.shapes.includes(shape)) { // Avoid duplicates on redo
+        // Add the shapes with their pre-assigned IDs
+        this.shapesToAdd.forEach(shape => {
+            // Check if a shape with this ID already exists (e.g., during redo)
+            const exists = this.tool.shapes.some(existingShape => existingShape.id === shape.id);
+            if (!exists) {
                  this.tool.shapes.push(shape);
                  this.tool.addPaletteColor(shape.color);
+                 // console.log(`ImportShapesCommand executed: Added shape ID ${shape.id}`);
+            } else {
+                 // console.log(`ImportShapesCommand executed: Shape ID ${shape.id} already exists, skipping add.`);
             }
         });
     }
 
     undo() {
-        // Remove the shapes that were added by this import command
-        this.importedShapes.forEach(shape => {
-            const index = this.tool.shapes.indexOf(shape);
+        // Remove the shapes that were added by this command, identified by ID
+        this.shapesToAdd.forEach(shape => {
+            const index = this.tool.shapes.findIndex(existingShape => existingShape.id === shape.id);
             if (index > -1) {
                 this.tool.shapes.splice(index, 1);
+                 // console.log(`ImportShapesCommand undo: Removed shape ID ${shape.id}`);
+            } else {
+                // console.warn(`ImportShapesCommand undo: Shape ID ${shape.id} not found.`);
             }
         });
-        // Palette state handling? Maybe re-render palette based on remaining shapes.
-        this.tool.renderPaletteFromShapes(); // Need to implement this helper
+        this.tool.renderPaletteFromShapes(); // Update palette based on remaining shapes
     }
 }
 
@@ -188,8 +204,11 @@ class CommandManager {
         command.execute();
         this.undoStack.push(command);
         this.redoStack = []; // Clear redo stack on new action
-        this.tool.redrawAll();
+        // Don't redraw here, let the caller handle it if needed after saving state
+        // this.tool.redrawAll();
         this.updateButtonStates(); // Update undo/redo button enable state
+        this.tool.saveStateToLocalStorage(); // Save state after execution
+        this.tool.redrawAll(); // Redraw AFTER saving potentially modified state
     }
 
     undo() {
@@ -197,8 +216,10 @@ class CommandManager {
             const command = this.undoStack.pop();
             command.undo();
             this.redoStack.push(command);
-            this.tool.redrawAll();
+            // this.tool.redrawAll(); // Moved after save
             this.updateButtonStates();
+            this.tool.saveStateToLocalStorage(); // Save state after undo
+            this.tool.redrawAll(); // Redraw AFTER saving
         } else {
             console.log("Nothing to undo.");
         }
@@ -209,8 +230,10 @@ class CommandManager {
             const command = this.redoStack.pop();
             command.execute(); // Re-execute the command
             this.undoStack.push(command);
-            this.tool.redrawAll();
+            // this.tool.redrawAll(); // Moved after save
             this.updateButtonStates();
+            this.tool.saveStateToLocalStorage(); // Save state after redo
+            this.tool.redrawAll(); // Redraw AFTER saving
         } else {
             console.log("Nothing to redo.");
         }
@@ -229,6 +252,8 @@ class CommandManager {
         this.undoStack = [];
         this.redoStack = [];
         this.updateButtonStates();
+        // No state change to save here directly, but clearing history often accompanies state changes (like load or clear canvas)
+        // Let the calling function (e.g., clearCanvas, loadState) handle saving/clearing localStorage
     }
 }
 
@@ -239,7 +264,7 @@ class IsometricDrawingTool {
     this.canvas = document.getElementById("isometricCanvas");
     this.ctx = this.canvas.getContext("2d");
     this.gridSize = 30; // Isometric cell height
-    this.shapes = []; // Store shape objects: { points: [...], color: '#hex' }
+    this.shapes = []; // Store shape objects: { points: [...], color: '#hex', id: ... }
     this.isDrawing = false;
     this.currentShapePoints = []; // Points for the shape being drawn
     this.snapPoint = null;
@@ -270,6 +295,9 @@ class IsometricDrawingTool {
     // Command Manager
     this.commandManager = new CommandManager(this);
 
+    // Shape ID Counter
+    this.shapeIdCounter = 0; // Initialize counter
+
     // Isometric projection angles and scaling
     this.angle = Math.PI / 6; // 30 degrees
     this.scaleX = Math.cos(this.angle);
@@ -283,10 +311,11 @@ class IsometricDrawingTool {
 
     // Initialize event listeners
     this.initializeEventListeners();
+    this.loadStateFromLocalStorage(); // Load saved state first
     this.updateActiveToolButton(); // Set initial active button state
-    this.renderPalette(); // Initial palette render
-    this.commandManager.updateButtonStates(); // Initialize button states
-    this.redrawAll();
+    this.renderPalette(); // Initial palette render (or after loading)
+    this.commandManager.updateButtonStates(); // Initialize button states (or after loading)
+    this.redrawAll(); // Initial draw (or after loading)
   }
 
   initializeEventListeners() {
@@ -585,7 +614,7 @@ class IsometricDrawingTool {
       for (let i = this.shapes.length - 1; i >= 0; i--) {
         const shape = this.shapes[i];
         if (this.isPointInPolygon({ x: canvasX, y: canvasY }, shape.points)) { // Use scaled coordinates
-          const deletedShapeData = { ...shape, points: [...shape.points] }; // Deep copy for command
+          const deletedShapeData = JSON.parse(JSON.stringify(shape));
           // Execute command - it will handle the actual deletion
           const command = new DeleteShapeCommand(this, i, deletedShapeData);
           this.commandManager.execute(command);
@@ -828,18 +857,25 @@ class IsometricDrawingTool {
     this.currentShapePoints = [];
     this.snapPoint = null;
     // No command needed, just visual state reset
+    // No need to save state on cancel, only on completed actions
     this.redrawAll();
   }
 
   clearCanvas() {
     if (this.shapes.length > 0) { // Only create command if there's something to clear
-        const originalShapes = this.shapes.map(s => ({ ...s, points: [...s.points] })); // Deep copy for command
+        // Deep copy shapes including their IDs for the command
+        const originalShapes = JSON.parse(JSON.stringify(this.shapes));
         const command = new ClearAllCommand(this, originalShapes);
-        this.commandManager.execute(command);
+        this.commandManager.execute(command); // This will save the new empty state
+        this.clearLocalStorage(); // Explicitly clear storage on user clear action
         // Command handles actual clearing and redraw
+    } else {
+         // Even if canvas is empty, ensure storage is cleared if user clicks clear
+         this.clearLocalStorage();
     }
     this.cancelDrawing(); // Also cancel any partial drawing
     this.setActiveTool("draw"); // Reset to draw tool on clear
+    // Redraw is handled by execute or happens implicitly if already empty
   }
 
   undo() {
@@ -857,10 +893,10 @@ class IsometricDrawingTool {
 
   // Add Redo method
   redo() {
-      this.commandManager.redo();
+      this.commandManager.redo(); // This will save state
        // Ensure tool mode is consistent after redo
        this.updateCursor();
-       this.redrawAll();
+       // redrawAll is handled by redo() now
   }
 
   exportSVG() {
@@ -1074,9 +1110,9 @@ class IsometricDrawingTool {
       try {
         const importedShapesData = this.parseSVGContent(svgContent); // Renamed parsing logic
         if (importedShapesData && importedShapesData.length > 0) {
-            // Create command for the import action
+            // Create command - IDs will be assigned within the command constructor
             const command = new ImportShapesCommand(this, importedShapesData);
-            this.commandManager.execute(command);
+            this.commandManager.execute(command); // This will save the new state
             // Command manager handles adding shapes, palette, redraw
              console.log(`Imported ${importedShapesData.length} shapes via command.`);
         } else {
@@ -1143,6 +1179,132 @@ class IsometricDrawingTool {
      // This function now only *parses* and *snaps*. The command handles adding to state.
      return parsedShapes;
   }
+
+  // --- Persistence ---
+
+  saveStateToLocalStorage() {
+    try {
+        const state = {
+            shapes: this.shapes,
+            paletteColors: this.paletteColors,
+            shapeIdCounter: this.shapeIdCounter, // Save the counter
+            undoStack: this.serializeCommandStack(this.commandManager.undoStack),
+            redoStack: this.serializeCommandStack(this.commandManager.redoStack),
+        };
+        localStorage.setItem("isometricDrawingState", JSON.stringify(state));
+        // console.log("State saved to localStorage.");
+    } catch (error) {
+        console.error("Failed to save state to localStorage:", error);
+        // Handle potential errors (e.g., storage quota exceeded)
+    }
+  }
+
+  loadStateFromLocalStorage() {
+    try {
+        const savedState = localStorage.getItem("isometricDrawingState");
+        if (savedState) {
+            const state = JSON.parse(savedState);
+
+            // Basic validation
+            if (state && Array.isArray(state.shapes) && Array.isArray(state.paletteColors) && typeof state.shapeIdCounter === 'number' && Array.isArray(state.undoStack) && Array.isArray(state.redoStack)) {
+                this.shapes = state.shapes;
+                this.paletteColors = state.paletteColors;
+                this.shapeIdCounter = state.shapeIdCounter; // Load the counter
+                this.commandManager.undoStack = this.deserializeCommandStack(state.undoStack);
+                this.commandManager.redoStack = this.deserializeCommandStack(state.redoStack);
+
+                console.log("State loaded from localStorage.");
+                this.renderPalette(); // Re-render palette with loaded colors
+                this.commandManager.updateButtonStates(); // Update buttons based on loaded stacks
+                this.redrawAll(); // Redraw the loaded state
+            } else {
+                console.warn("Invalid state format found in localStorage. Starting fresh.");
+                localStorage.removeItem("isometricDrawingState"); // Clear invalid data
+            }
+        } else {
+            console.log("No saved state found in localStorage.");
+        }
+    } catch (error) {
+        console.error("Failed to load state from localStorage:", error);
+        localStorage.removeItem("isometricDrawingState"); // Clear potentially corrupted data
+    }
+  }
+
+  clearLocalStorage() {
+    try {
+        localStorage.removeItem("isometricDrawingState");
+        console.log("Cleared saved state from localStorage.");
+    } catch (error) {
+        console.error("Failed to clear localStorage:", error);
+    }
+  }
+
+  // Helper to serialize commands without circular refs
+  serializeCommandStack(stack) {
+    return stack.map(command => {
+        const commandData = { ...command };
+        delete commandData.tool; // Remove reference to the tool itself
+        return {
+            type: command.constructor.name,
+            data: commandData
+        };
+    });
+  }
+
+  // Helper to deserialize commands and re-inject the tool reference
+  deserializeCommandStack(serializedStack) {
+    return serializedStack.map(serializedCommand => {
+        const { type, data } = serializedCommand;
+        let CommandClass;
+        // Find the correct class constructor based on the type string
+        switch (type) {
+            case 'AddShapeCommand': CommandClass = AddShapeCommand; break;
+            case 'DeleteShapeCommand': CommandClass = DeleteShapeCommand; break;
+            case 'FillShapeCommand': CommandClass = FillShapeCommand; break;
+            case 'EditShapePointCommand': CommandClass = EditShapePointCommand; break;
+            case 'ClearAllCommand': CommandClass = ClearAllCommand; break;
+            case 'ImportShapesCommand': CommandClass = ImportShapesCommand; break;
+            default:
+                console.error(`Unknown command type during deserialization: ${type}`);
+                return null; // Or throw an error
+        }
+
+        if (CommandClass) {
+            // Recreate the command instance, passing the tool and the data properties
+            // Pass properties individually for robustness:
+            if (type === 'AddShapeCommand') {
+                // shapeData should include ID from saved state
+                return new AddShapeCommand(this, data.shapeData);
+            } else if (type === 'DeleteShapeCommand') {
+                // deletedShape should include ID from saved state
+                return new DeleteShapeCommand(this, data.shapeIndex, data.deletedShape);
+            } else if (type === 'FillShapeCommand') {
+                return new FillShapeCommand(this, data.shapeIndex, data.oldColor, data.newColor);
+            } else if (type === 'EditShapePointCommand') {
+                // Edit command doesn't strictly need shape ID if index is reliable, but shape ID is present in shapes array
+                return new EditShapePointCommand(this, data.shapeIndex, data.pointIndex, data.oldPoint, data.newPoint);
+            } else if (type === 'ClearAllCommand') {
+                 // originalShapes should include IDs
+                 return new ClearAllCommand(this, data.originalShapes);
+            } else if (type === 'ImportShapesCommand') {
+                // shapesToAdd should include IDs from saved state
+                const command = new ImportShapesCommand(this, []); // Create dummy command
+                command.shapesToAdd = data.shapesToAdd; // Overwrite with loaded data including IDs
+                return command;
+            }
+        }
+        return null;
+    }).filter(command => command !== null); // Filter out any commands that failed to deserialize
+  }
+
+  // --- End Persistence ---
+
+  // --- Shape ID Management ---
+  getNextShapeId() {
+      this.shapeIdCounter += 1;
+      return this.shapeIdCounter;
+  }
+  // --- End Shape ID Management ---
 }
 
 // Initialize the drawing tool when the page loads

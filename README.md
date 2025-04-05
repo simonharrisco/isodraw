@@ -16,6 +16,7 @@ A simple web-based isometric drawing tool that allows you to create drawings on 
 - Import SVG drawings (compatible with exported format)
 - Clear canvas functionality
 - Responsive design
+- State persistence (drawing, palette, history) via browser's localStorage
 
 ## How to Use
 
