@@ -64,14 +64,25 @@ class IsometricDrawingTool {
       .addEventListener("click", () => this.undoLastShape());
   }
 
+  // Helper function to get mouse coordinates relative to the canvas' internal resolution
+  getCanvasCoordinates(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+    const canvasX = (event.clientX - rect.left) * scaleX;
+    const canvasY = (event.clientY - rect.top) * scaleY;
+    return { x: canvasX, y: canvasY };
+  }
+
   // Convert screen coordinates (mouse position) to the nearest isometric grid point
-  screenToNearestGridPoint(screenX, screenY) {
+  // Takes coordinates relative to the canvas' internal resolution (e.g., 800x600)
+  screenToNearestGridPoint(canvasX, canvasY) {
     const originX = this.canvas.width / 2;
     const originY = this.canvas.height / 2; // Adjusted Y origin to canvas center
 
     // Relative coordinates from the origin
-    const relX = screenX - originX;
-    const relY = screenY - originY;
+    const relX = canvasX - originX;
+    const relY = canvasY - originY;
 
     // Calculate grid coordinates using inverse isometric projection
     // Derived from:
@@ -110,7 +121,8 @@ class IsometricDrawingTool {
   drawGrid() {
     this.ctx.strokeStyle = "#eee"; // Lighter grid lines
     this.ctx.lineWidth = 0.5;
-    const range = 15; // How many grid units out from the center
+    // Extend grid drawing further out to cover potential larger scaled views
+    const range = 25; // How many grid units out from the center
 
     // Draw lines along one isometric axis
     for (let i = -range; i <= range; i++) {
@@ -243,16 +255,14 @@ class IsometricDrawingTool {
 
   handleMouseDown(e) {
     if (e.button !== 0) return;
-    const rect = this.canvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
+    const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(e); // Use scaled coordinates
 
     if (this.isDeleteMode) {
       // --- Delete Logic ---
       let deleted = false;
       for (let i = this.shapes.length - 1; i >= 0; i--) {
         const shape = this.shapes[i];
-        if (this.isPointInPolygon({ x: screenX, y: screenY }, shape.points)) {
+        if (this.isPointInPolygon({ x: canvasX, y: canvasY }, shape.points)) { // Use scaled coordinates
           this.shapes.splice(i, 1); // Remove the clicked shape
           deleted = true;
           this.redrawAll();
@@ -270,7 +280,7 @@ class IsometricDrawingTool {
         const shape = this.shapes[i];
         if (
           shape.points.length > 2 &&
-          this.isPointInPolygon({ x: screenX, y: screenY }, shape.points)
+          this.isPointInPolygon({ x: canvasX, y: canvasY }, shape.points) // Use scaled coordinates
         ) {
           // Update the color of the clicked shape
           shape.color = this.currentColor;
@@ -284,7 +294,7 @@ class IsometricDrawingTool {
       }
     } else {
       // --- Drawing Logic ---
-      const gridPos = this.screenToNearestGridPoint(screenX, screenY);
+      const gridPos = this.screenToNearestGridPoint(canvasX, canvasY); // Use scaled coordinates
       const clickedScreenPos = this.gridToScreen(gridPos.x, gridPos.y);
 
       if (!this.isDrawing) {
@@ -324,9 +334,7 @@ class IsometricDrawingTool {
   }
 
   handleMouseMove(e) {
-    const rect = this.canvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
+    const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(e); // Use scaled coordinates
 
     if (this.isFillMode || this.isDeleteMode) {
       let shapeHovered = false;
@@ -334,7 +342,7 @@ class IsometricDrawingTool {
       for (let i = this.shapes.length - 1; i >= 0; i--) {
         if (
           this.isPointInPolygon(
-            { x: screenX, y: screenY },
+            { x: canvasX, y: canvasY }, // Use scaled coordinates
             this.shapes[i].points
           )
         ) {
@@ -353,7 +361,7 @@ class IsometricDrawingTool {
     }
 
     // --- Default Draw Mode MouseMove Logic ---
-    const gridPos = this.screenToNearestGridPoint(screenX, screenY);
+    const gridPos = this.screenToNearestGridPoint(canvasX, canvasY); // Use scaled coordinates
     const snappedScreenPos = this.gridToScreen(gridPos.x, gridPos.y);
     this.snapPoint = snappedScreenPos;
     this.redrawAll(); // Only redraw for snap point updates in Draw mode
