@@ -19,7 +19,7 @@ class Command {
 class AddShapeCommand extends Command {
   constructor(tool, shapeData) {
     super();
-    //test comment
+    //test comment?x
     this.tool = tool;
     this.shapeData = shapeData; // { points: [...], color: '...', id: ... } - ID added in execute
   }
