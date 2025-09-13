@@ -1,36 +1,93 @@
-
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 
-// Helper to create a deep copy
-const deepCopy = (obj) => JSON.parse(JSON.stringify(obj));
+// --- TYPE DEFINITIONS ---
 
-export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
+export type Point = {
+  x: number;
+  y: number;
+};
+
+export type Shape = {
+  id: number;
+  points: Point[];
+  color: string;
+};
+
+type Tool = 'draw' | 'fill' | 'delete' | 'edit';
+
+// A more specific type for undo actions can be created if needed
+type UndoAction = {
+  type: string;
+  payload: any;
+};
+
+interface DrawingState {
+  shapes: Shape[];
+  paletteColors: string[];
+  shapeIdCounter: number;
+  activeTool: Tool;
+  currentColor: string;
+  currentDrawing: {
+    isDrawing: boolean;
+    points: Point[];
+  };
+  selection: {
+    shapeIndex: number;
+    pointIndex: number;
+    isDragging: boolean;
+    dragStartPoint?: Point;
+  };
+  undoStack: UndoAction[];
+  redoStack: UndoAction[];
+  snapPoint: Point | null;
+}
+
+interface DrawingActions {
+  setActiveTool: (tool: Tool) => void;
+  setCurrentColor: (color: string) => void;
+  addPaletteColor: (color: string) => void;
+  setSnapPoint: (point: Point | null) => void;
+  startDrawing: (point: Point) => void;
+  addDrawingPoint: (point: Point) => void;
+  finishDrawing: () => void;
+  cancelDrawing: () => void;
+  deleteShape: (shapeId: number) => void;
+  fillShape: (shapeId: number, newColor: string) => void;
+  startDraggingPoint: (shapeIndex: number, pointIndex: number, startPoint: Point) => void;
+  dragPoint: (newPoint: Point) => void;
+  finishDraggingPoint: () => void;
+  clearCanvas: () => void;
+  importShapes: (importedShapes: Omit<Shape, 'id'>[]) => void;
+  undo: () => void;
+  redo: () => void;
+  saveStateToLocalStorage: () => void;
+  loadStateFromLocalStorage: () => void;
+}
+
+type DrawingStore = DrawingState & DrawingActions;
+
+// Helper to create a deep copy
+const deepCopy = <T>(obj: T): T => JSON.parse(JSON.stringify(obj));
+
+export const useDrawingStore = create<DrawingStore>()(subscribeWithSelector((set, get) => ({
   // --- STATE ---
   shapes: [],
   paletteColors: ["#000000", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF"],
   shapeIdCounter: 0,
-  activeTool: 'draw', // 'draw', 'fill', 'delete', 'edit'
+  activeTool: 'draw',
   currentColor: '#000000',
-
-  // State for the shape currently being drawn
   currentDrawing: {
     isDrawing: false,
     points: [],
   },
-
-  // State for editing a shape
   selection: {
     shapeIndex: -1,
     pointIndex: -1,
     isDragging: false,
   },
-
-  // Undo/Redo stacks
   undoStack: [],
   redoStack: [],
-
-  // Transient view state
   snapPoint: null,
 
   // --- ACTIONS ---
@@ -85,13 +142,13 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
     }
 
     const newId = shapeIdCounter + 1;
-    const newShape = {
+    const newShape: Shape = {
       id: newId,
       points: deepCopy(currentDrawing.points),
       color: currentColor,
     };
 
-    const undoAction = {
+    const undoAction: UndoAction = {
       type: 'DELETE_SHAPE',
       payload: { shapeId: newId },
     };
@@ -116,7 +173,7 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
     const shapeToDelete = shapes.find(s => s.id === shapeId);
     if (!shapeToDelete) return;
 
-    const undoAction = {
+    const undoAction: UndoAction = {
       type: 'ADD_SHAPE',
       payload: { shape: deepCopy(shapeToDelete) },
     };
@@ -134,7 +191,7 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
     if (!shapeToFill || shapeToFill.color === newColor) return;
 
     const oldColor = shapeToFill.color;
-    const undoAction = {
+    const undoAction: UndoAction = {
       type: 'FILL_SHAPE',
       payload: { shapeId, color: oldColor },
     };
@@ -163,14 +220,14 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
 
   finishDraggingPoint: () => {
     const { selection, shapes } = get();
-    if (!selection.isDragging) return;
+    if (!selection.isDragging || !selection.dragStartPoint) return;
 
     const { shapeIndex, pointIndex, dragStartPoint } = selection;
     const finalPoint = shapes[shapeIndex].points[pointIndex];
 
     // Only create undo action if the point actually moved
     if (dragStartPoint.x !== finalPoint.x || dragStartPoint.y !== finalPoint.y) {
-      const undoAction = {
+      const undoAction: UndoAction = {
         type: 'EDIT_SHAPE_POINT',
         payload: {
           shapeIndex,
@@ -191,14 +248,13 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
     const { shapes } = get();
     if (shapes.length === 0) return;
 
-    const undoAction = {
+    const undoAction: UndoAction = {
       type: 'IMPORT_SHAPES',
       payload: { shapes: deepCopy(shapes) },
     };
 
     set(state => ({
       shapes: [],
-      paletteColors: [],
       currentDrawing: { isDrawing: false, points: [] },
       undoStack: [...state.undoStack, undoAction],
       redoStack: [],
@@ -207,14 +263,14 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
 
   importShapes: (importedShapes) => {
     let { shapeIdCounter } = get();
-    const shapesWithIds = importedShapes.map(shape => ({
+    const shapesWithIds: Shape[] = importedShapes.map(shape => ({
       ...shape,
       id: ++shapeIdCounter,
     }));
 
-    const undoAction = {
+    const undoAction: UndoAction = {
       type: 'DELETE_MULTIPLE_SHAPES',
-      payload: { shapeIds: shapesWithIds.map(s => s.id) },
+      payload: { shapeIds: shapesWithIds.map((s: Shape) => s.id) },
     };
 
     set(state => ({
@@ -273,16 +329,16 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
       }
       case 'IMPORT_SHAPES': {
         const { shapes: shapesToRestore } = lastAction.payload;
-        newRedoStack[newRedoStack.length - 1] = { type: 'DELETE_MULTIPLE_SHAPES', payload: { shapeIds: shapesToRestore.map(s => s.id) } };
+        newRedoStack[newRedoStack.length - 1] = { type: 'DELETE_MULTIPLE_SHAPES', payload: { shapeIds: shapesToRestore.map((s: Shape) => s.id) } };
         newShapes.push(...shapesToRestore);
-        shapesToRestore.forEach(s => get().addPaletteColor(s.color));
+        shapesToRestore.forEach((s: Shape) => get().addPaletteColor(s.color));
         break;
       }
       case 'DELETE_MULTIPLE_SHAPES': {
         const { shapeIds } = lastAction.payload;
-        const shapesToRestore = shapes.filter(s => shapeIds.includes(s.id));
+        const shapesToRestore = shapes.filter((s: Shape) => shapeIds.includes(s.id));
         newRedoStack[newRedoStack.length - 1] = { type: 'IMPORT_SHAPES', payload: { shapes: deepCopy(shapesToRestore) } };
-        newShapes = newShapes.filter(s => !shapeIds.includes(s.id));
+        newShapes = newShapes.filter((s: Shape) => !shapeIds.includes(s.id));
         break;
       }
     }
@@ -307,16 +363,16 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
       }
       case 'DELETE_SHAPE': {
         const { shapeId } = lastAction.payload;
-        const shapeToRestore = shapes.find(s => s.id === shapeId);
+        const shapeToRestore = shapes.find((s: Shape) => s.id === shapeId);
         if (shapeToRestore) {
           newUndoStack[newUndoStack.length - 1] = { type: 'ADD_SHAPE', payload: { shape: deepCopy(shapeToRestore) } };
-          newShapes = newShapes.filter(s => s.id !== shapeId);
+          newShapes = newShapes.filter((s: Shape) => s.id !== shapeId);
         }
         break;
       }
       case 'FILL_SHAPE': {
         const { shapeId, color } = lastAction.payload;
-        const shapeToUpdate = newShapes.find(s => s.id === shapeId);
+        const shapeToUpdate = newShapes.find((s: Shape) => s.id === shapeId);
         if (shapeToUpdate) {
           newUndoStack[newUndoStack.length - 1] = { type: 'FILL_SHAPE', payload: { shapeId, color: shapeToUpdate.color } };
           shapeToUpdate.color = color;
@@ -335,16 +391,16 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
       }
       case 'IMPORT_SHAPES': {
         const { shapes: shapesToRestore } = lastAction.payload;
-        newUndoStack[newUndoStack.length - 1] = { type: 'DELETE_MULTIPLE_SHAPES', payload: { shapeIds: shapesToRestore.map(s => s.id) } };
+        newUndoStack[newUndoStack.length - 1] = { type: 'DELETE_MULTIPLE_SHAPES', payload: { shapeIds: shapesToRestore.map((s: Shape) => s.id) } };
         newShapes.push(...shapesToRestore);
-        shapesToRestore.forEach(s => get().addPaletteColor(s.color));
+        shapesToRestore.forEach((s: Shape) => get().addPaletteColor(s.color));
         break;
       }
       case 'DELETE_MULTIPLE_SHAPES': {
         const { shapeIds } = lastAction.payload;
-        const shapesToRestore = shapes.filter(s => shapeIds.includes(s.id));
+        const shapesToRestore = shapes.filter((s: Shape) => shapeIds.includes(s.id));
         newUndoStack[newUndoStack.length - 1] = { type: 'IMPORT_SHAPES', payload: { shapes: deepCopy(shapesToRestore) } };
-        newShapes = newShapes.filter(s => !shapeIds.includes(s.id));
+        newShapes = newShapes.filter((s: Shape) => !shapeIds.includes(s.id));
         break;
       }
     }
@@ -362,7 +418,7 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
     const savedState = localStorage.getItem('isometricDrawingState');
     if (savedState) {
       try {
-        const state = JSON.parse(savedState);
+        const state = JSON.parse(savedState) as DrawingState;
         if (state && state.shapes && state.paletteColors && state.shapeIdCounter) {
           set(state);
         }
@@ -375,7 +431,7 @@ export const useDrawingStore = create(subscribeWithSelector((set, get) => ({
 
 // Subscribe to changes and save to local storage
 useDrawingStore.subscribe(
-  (state) => [state.shapes, state.paletteColors, state.shapeIdCounter, state.undoStack, state.redoStack],
+  (state: DrawingState) => [state.shapes, state.paletteColors, state.shapeIdCounter, state.undoStack, state.redoStack],
   (currentState, prevState) => {
     // A simple deep compare to avoid saving on every minor change if state is the same
     if (JSON.stringify(currentState) !== JSON.stringify(prevState)) {

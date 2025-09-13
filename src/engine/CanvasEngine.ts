@@ -1,10 +1,21 @@
 
-import { useDrawingStore } from '../store/drawingStore';
+import { useDrawingStore, Shape } from '../store/drawingStore';
+import type { Point } from '../store/drawingStore';
 
 export class CanvasEngine {
-  constructor(canvas) {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  gridSize: number;
+  dragPointRadius: number;
+  angle: number;
+  scaleX: number;
+  scaleY: number;
+  isoWidth: number;
+  isoHeight: number;
+
+  constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.ctx = this.canvas.getContext('2d');
+    this.ctx = this.canvas.getContext('2d')!;
 
     // --- Configuration ---
     this.gridSize = 30;
@@ -44,7 +55,7 @@ export class CanvasEngine {
   }
 
   // --- Input Handlers (Dispatch actions to store) ---
-  handleMouseDown(e) {
+  handleMouseDown(e: MouseEvent) {
     if (e.button !== 0) return;
     const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(e);
     const { activeTool, shapes, startDrawing, deleteShape, fillShape, currentColor, startDraggingPoint } = useDrawingStore.getState();
@@ -111,7 +122,7 @@ export class CanvasEngine {
     }
   }
 
-  handleMouseMove(e) {
+  handleMouseMove(e: MouseEvent) {
     const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(e);
     const { activeTool, selection, shapes, dragPoint } = useDrawingStore.getState();
 
@@ -155,7 +166,7 @@ export class CanvasEngine {
     this.canvas.style.cursor = cursorStyle;
   }
 
-  handleMouseUp(e) {
+  handleMouseUp(e: MouseEvent) {
     if (e.button !== 0) return;
     const { activeTool, selection, finishDraggingPoint } = useDrawingStore.getState();
 
@@ -172,7 +183,7 @@ export class CanvasEngine {
     }
   }
 
-  handleKeyDown(e) {
+  handleKeyDown(e: KeyboardEvent) {
     const { undo, redo, cancelDrawing, setActiveTool } = useDrawingStore.getState();
     const isModKey = e.ctrlKey || e.metaKey;
 
@@ -319,14 +330,14 @@ export class CanvasEngine {
   }
 
   // --- Utility Methods ---
-  getCanvasCoordinates(event) {
+  getCanvasCoordinates(event: MouseEvent) {
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = this.canvas.width / rect.width;
     const scaleY = this.canvas.height / rect.height;
     return { x: (event.clientX - rect.left) * scaleX, y: (event.clientY - rect.top) * scaleY };
   }
 
-  screenToNearestGridPoint(canvasX, canvasY) {
+  screenToNearestGridPoint(canvasX: number, canvasY: number) {
     const originX = this.canvas.width / 2;
     const originY = this.canvas.height / 2;
     const relX = canvasX - originX;
@@ -336,7 +347,7 @@ export class CanvasEngine {
     return { x: gridX, y: gridY };
   }
 
-  gridToScreen(gridX, gridY) {
+  gridToScreen(gridX: number, gridY: number) {
     const originX = this.canvas.width / 2;
     const originY = this.canvas.height / 2;
     const screenX = originX + (gridX - gridY) * this.isoWidth;
@@ -344,7 +355,7 @@ export class CanvasEngine {
     return { x: screenX, y: screenY };
   }
 
-  isPointInPolygon(point, polygon) {
+  isPointInPolygon(point: Point, polygon: Point[]) {
     let inside = false;
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
       let xi = polygon[i].x, yi = polygon[i].y;
@@ -356,10 +367,11 @@ export class CanvasEngine {
   }
   
   // Public method to handle file import
-  importFromSVG(file) {
+  importFromSVG(file: File) {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const svgContent = e.target.result;
+    reader.onload = (e: ProgressEvent<FileReader>) => {
+      const svgContent = e.target?.result;
+      if (typeof svgContent === 'string') {
       try {
         const parsedShapes = this.parseSVGContent(svgContent);
         if (parsedShapes.length > 0) {
@@ -369,15 +381,15 @@ export class CanvasEngine {
         console.error("Error parsing SVG:", error);
         alert("Failed to parse SVG.");
       }
-    };
+    }};
     reader.readAsText(file);
   }
 
-  parseSVGContent(svgContent) {
+  parseSVGContent(svgContent: string): Omit<Shape, 'id'>[] {
     const parser = new DOMParser();
     const svgDoc = parser.parseFromString(svgContent, "image/svg+xml");
     const shapeElements = svgDoc.querySelectorAll("polygon, polyline");
-    const parsedShapes = [];
+    const parsedShapes: Omit<Shape, 'id'>[] = [];
     shapeElements.forEach(el => {
       const pointsString = el.getAttribute("points")?.trim();
       if (!pointsString) return;
@@ -438,7 +450,7 @@ export class CanvasEngine {
     this.downloadSVG(svgContent, 'drawing.svg');
   }
 
-  downloadSVG(svgContent, filename) {
+  downloadSVG(svgContent: string, filename: string) {
     const blob = new Blob([svgContent], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

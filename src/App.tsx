@@ -5,8 +5,8 @@ import Toolbar from './components/Toolbar';
 import ColorPalette from './components/ColorPalette';
 
 function App() {
-  const canvasRef = useRef(null);
-  const engineRef = useRef(null); // To hold the engine instance
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const engineRef = useRef<CanvasEngine | null>(null); // To hold the engine instance
 
   useEffect(() => {
     // Instantiate the engine only once

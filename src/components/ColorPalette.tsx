@@ -10,7 +10,7 @@ const ColorPalette = () => {
     setCurrentColor: state.setCurrentColor,
   }), shallow);
 
-  const handleColorChange = (e) => {
+  const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCurrentColor(e.target.value);
   };
 

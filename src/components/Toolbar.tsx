@@ -2,8 +2,13 @@
 import React, { useRef } from 'react';
 import { useDrawingStore } from '../store/drawingStore';
 import { shallow } from 'zustand/shallow';
+import { CanvasEngine } from '../engine/CanvasEngine';
 
-const Toolbar = ({ engineRef }) => {
+interface ToolbarProps {
+  engineRef: React.RefObject<CanvasEngine | null>;
+}
+
+const Toolbar = ({ engineRef }: ToolbarProps) => {
   const { 
     activeTool, 
     setActiveTool, 
@@ -22,18 +27,22 @@ const Toolbar = ({ engineRef }) => {
     redoStack: state.redoStack,
   }), shallow);
 
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportClick = () => {
-    fileInputRef.current.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file && engineRef.current) {
       engineRef.current.importFromSVG(file);
     }
-    e.target.value = null; // Reset file input
+    if (e.target) {
+        e.target.value = ""; // Reset file input
+    }
   };
 
   const handleExportClick = () => {
