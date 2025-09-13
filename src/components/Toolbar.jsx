@@ -1,6 +1,7 @@
 
 import React, { useRef } from 'react';
 import { useDrawingStore } from '../store/drawingStore';
+import { shallow } from 'zustand/shallow';
 
 const Toolbar = ({ engineRef }) => {
   const { 
@@ -19,7 +20,7 @@ const Toolbar = ({ engineRef }) => {
     clearCanvas: state.clearCanvas,
     undoStack: state.undoStack,
     redoStack: state.redoStack,
-  }));
+  }), shallow);
 
   const fileInputRef = useRef(null);
 

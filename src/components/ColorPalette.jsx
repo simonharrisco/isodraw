@@ -1,13 +1,14 @@
 
 import React from 'react';
 import { useDrawingStore } from '../store/drawingStore';
+import { shallow } from 'zustand/shallow';
 
 const ColorPalette = () => {
   const { paletteColors, currentColor, setCurrentColor } = useDrawingStore(state => ({
     paletteColors: state.paletteColors,
     currentColor: state.currentColor,
     setCurrentColor: state.setCurrentColor,
-  }));
+  }), shallow);
 
   const handleColorChange = (e) => {
     setCurrentColor(e.target.value);
