@@ -1,239 +1,241 @@
 :root {
-    --background-color: #f8f8f8; /* Off-white background */
-    --canvas-background: #ffffff;
-    --text-color: #333333;
-    --border-color: #e0e0e0;
-    --primary-accent: #007aff; /* Apple-like blue */
-    --secondary-accent: #e5e5ea; /* Light gray for subtle backgrounds */
-    --danger-accent: #ff3b30; /* Apple-like red */
-    --button-text-color: #ffffff;
-    --button-hover-bg: rgba(0, 0, 0, 0.05);
-    --tool-button-active-bg: var(--primary-accent);
-    --tool-button-active-text: var(--button-text-color);
-    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-                   Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-    --border-radius: 6px;
+  --background-color: #f8f8f8; /* Off-white background */
+  --canvas-background: #ffffff;
+  --text-color: #333333;
+  --border-color: #e0e0e0;
+  --primary-accent: #007aff; /* Apple-like blue */
+  --secondary-accent: #e5e5ea; /* Light gray for subtle backgrounds */
+  --danger-accent: #ff3b30; /* Apple-like red */
+  --button-text-color: #ffffff;
+  --button-hover-bg: rgba(0, 0, 0, 0.05);
+  --tool-button-active-bg: var(--primary-accent);
+  --tool-button-active-text: var(--button-text-color);
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --border-radius: 6px;
 }
 
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-html, body {
-    height: 100%;
+html,
+body {
+  height: 100%;
 }
 
 body {
-    background-color: var(--background-color);
-    font-family: var(--font-family);
-    color: var(--text-color);
-    line-height: 1.5;
-    display: flex;
-    flex-direction: column;
+  background-color: var(--background-color);
+  font-family: var(--font-family);
+  color: var(--text-color);
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-container {
-    display: flex;
-    flex-direction: column;
-    max-width: 800px;
-    width: 95%;
-    margin: 0 auto;
-    padding: 0;
-    flex-grow: 1;
-    height: 100%;
-    justify-content: center;
+  display: flex;
+  flex-direction: column;
+  max-width: 800px;
+  width: 95%;
+  margin: 0 auto;
+  padding: 0;
+  flex-grow: 1;
+  height: 100vh;
+  justify-content: center;
 }
 
 .app-header {
-    text-align: center;
-    margin-bottom: 25px;
+  text-align: center;
+  margin-bottom: 25px;
 }
 
 .app-header h1 {
-    font-size: 1.8em;
-    font-weight: 500;
-    color: var(--text-color);
+  font-size: 1.8em;
+  font-weight: 500;
+  color: var(--text-color);
 }
 
 .toolbar-container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background-color: var(--canvas-background);
-    padding: 12px 15px;
-    border-radius: var(--border-radius);
-    border: 1px solid var(--border-color);
-    flex-wrap: wrap;
-    gap: 15px;
-    flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--canvas-background);
+  padding: 12px 15px;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  gap: 15px;
+  flex-shrink: 0;
 }
 
 .tool-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 /* --- Buttons --- */
 button {
-    font-family: inherit;
-    font-size: 0.9em;
-    padding: 8px 15px;
-    border-radius: var(--border-radius);
-    border: 1px solid var(--border-color);
-    background-color: var(--canvas-background);
-    color: var(--text-color);
-    cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  font-family: inherit;
+  font-size: 0.9em;
+  padding: 8px 15px;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  background-color: var(--canvas-background);
+  color: var(--text-color);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background-color: var(--secondary-accent);
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--secondary-accent);
 }
 
 button:hover {
-    background-color: var(--button-hover-bg);
-    border-color: darken(var(--border-color), 5%);
+  background-color: var(--button-hover-bg);
+  border-color: darken(var(--border-color), 5%);
 }
 
 button:active {
-    background-color: rgba(0, 0, 0, 0.08);
+  background-color: rgba(0, 0, 0, 0.08);
 }
 
 /* Specific Tool Buttons (Draw, Fill, Delete) */
 .tool-button {
-    padding: 8px 12px;
+  padding: 8px 12px;
 }
 
 .tool-button.active {
-    background-color: var(--tool-button-active-bg);
-    color: var(--tool-button-active-text);
-    border-color: var(--tool-button-active-bg);
+  background-color: var(--tool-button-active-bg);
+  color: var(--tool-button-active-text);
+  border-color: var(--tool-button-active-bg);
 }
 
 #fillToggleBtn.active {
-    background-color: var(--primary-accent);
-    border-color: var(--primary-accent);
-    color: var(--button-text-color);
+  background-color: var(--primary-accent);
+  border-color: var(--primary-accent);
+  color: var(--button-text-color);
 }
 
 #deleteToggleBtn.active {
-    background-color: var(--danger-accent);
-    border-color: var(--danger-accent);
-    color: var(--button-text-color);
+  background-color: var(--danger-accent);
+  border-color: var(--danger-accent);
+  color: var(--button-text-color);
 }
 
 #editToolBtn.active {
-    background-color: var(--primary-accent);
-    border-color: var(--primary-accent);
-    color: var(--button-text-color);
+  background-color: var(--primary-accent);
+  border-color: var(--primary-accent);
+  color: var(--button-text-color);
 }
 
 /* --- Color Picker --- */
 .color-picker-group input[type="color"] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background-color: transparent;
-    cursor: pointer;
-    overflow: hidden;
-    border: 1px solid var(--border-color);
-    transition: border-color 0.15s ease;
-    display: block;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  transition: border-color 0.15s ease;
+  display: block;
 }
 
 .color-picker-group input[type="color"]:hover {
-    border-color: var(--primary-accent);
+  border-color: var(--primary-accent);
 }
 
 .color-picker-group input[type="color"]::-webkit-color-swatch-wrapper {
-    padding: 0;
-    border-radius: 50%;
+  padding: 0;
+  border-radius: 50%;
 }
 
 .color-picker-group input[type="color"]::-webkit-color-swatch {
-    border: none;
-    border-radius: 50%;
+  border: none;
+  border-radius: 50%;
 }
 
 .color-picker-group input[type="color"]::-moz-color-swatch {
-    border: none;
-    border-radius: 50%;
+  border: none;
+  border-radius: 50%;
 }
 
 /* --- Edit Mode Point Indicator --- */
 .draggable-point {
-    fill: #ffffff; /* White fill */
-    stroke: var(--primary-accent); /* Blue border */
-    stroke-width: 1.5px;
-    cursor: grab;
+  fill: #ffffff; /* White fill */
+  stroke: var(--primary-accent); /* Blue border */
+  stroke-width: 1.5px;
+  cursor: grab;
 }
 
 .draggable-point:active {
-    cursor: grabbing;
+  cursor: grabbing;
 }
 
 /* --- Canvas --- */
 .canvas-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  flex-shrink: 0;
 }
 
 #isometricCanvas {
-    background-color: var(--canvas-background);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    max-width: 100%;
-    display: block;
+  background-color: var(--canvas-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  max-width: 100%;
+  display: block;
 }
 
 /* --- Color Palette --- */
 .palette-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background-color: var(--canvas-background);
-    padding: 10px 15px;
-    border-radius: var(--border-radius);
-    border: 1px solid var(--border-color);
-    flex-wrap: wrap; /* Allow wrapping if too many colors */
-    min-height: 50px; /* Ensure it has some height even when empty */
-    flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--canvas-background);
+  padding: 10px 15px;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  flex-wrap: wrap; /* Allow wrapping if too many colors */
+  min-height: 50px; /* Ensure it has some height even when empty */
+  flex-shrink: 0;
 }
 
 .palette-swatch {
-    width: 28px;
-    height: 28px;
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    border: 1px solid var(--border-color);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .palette-swatch:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+  transform: scale(1.1);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
 /* --- Utility --- */
 .visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    border: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
 }
