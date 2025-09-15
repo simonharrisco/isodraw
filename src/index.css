@@ -1,5 +1,13 @@
+.nabla-isofont {
+  font-family: "Nabla", system-ui;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+  font-variation-settings: "EDPT" 70, "EHLT" 0;
+}
+
 :root {
-  --background-color: #f8f8f8; /* Off-white background */
+  --background-color: #0c0c0c; /* Off-white background */
   --canvas-background: #ffffff;
   --text-color: #333333;
   --border-color: #e0e0e0;
@@ -12,7 +20,6 @@
   --tool-button-active-text: var(--button-text-color);
   --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-  --border-radius: 6px;
 }
 
 * {
@@ -83,12 +90,13 @@ button {
   font-size: 0.9em;
   padding: 8px 15px;
   border-radius: var(--border-radius);
-  border: 1px solid var(--border-color);
-  background-color: var(--canvas-background);
+  border: none;
+  background-color: var(--secondary-accent);
   color: var(--text-color);
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease,
     color 0.15s ease;
+  clip-path: polygon(0 20%, 10% 0, 100% 0, 100% 80%, 90% 100%, 0% 100%);
 }
 
 button:disabled {

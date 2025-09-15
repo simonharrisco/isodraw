@@ -1,8 +1,7 @@
-
-import React, { useRef, useEffect } from 'react';
-import { CanvasEngine } from './engine/CanvasEngine';
-import Toolbar from './components/Toolbar';
-import ColorPalette from './components/ColorPalette';
+import React, { useRef, useEffect } from "react";
+import { CanvasEngine } from "./engine/CanvasEngine";
+import Toolbar from "./components/Toolbar";
+import ColorPalette from "./components/ColorPalette";
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -23,6 +22,9 @@ function App() {
 
   return (
     <main className="app-container">
+      <div>
+        <h1 className="nabla-isofont">isodraw</h1>
+      </div>
       <Toolbar engineRef={engineRef} />
       <ColorPalette />
       <section className="canvas-container">
